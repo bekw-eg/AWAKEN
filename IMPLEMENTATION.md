@@ -1,5 +1,9 @@
 # AWAKEN — Camera System
 
+> Архив полного кода этапа 1. Актуальная реализация этапа 2 находится в исходниках
+> проекта и [SQUAT_DETECTOR.md](SQUAT_DETECTOR.md). Git-инструкции этого архива исторические;
+> текущий workflow описан в README.md и AGENTS.md.
+
 Этап 1: webcam → MediaPipe Pose Landmarker → landmarks → canvas skeleton.
 
 Реализованы камера, распознавание одной позы, скелет, состояния загрузки, ошибки,

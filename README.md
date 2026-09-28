@@ -1,9 +1,13 @@
-# AWAKEN — Camera System
+# AWAKEN — Squat Training
 
-Этап 1: webcam → MediaPipe Pose Landmarker → landmarks → canvas skeleton.
+Этап 2: webcam → MediaPipe landmarks → Squat Detector → Rep Counter + Error Mode.
 
-Реализованы камера, распознавание одной позы, скелет, состояния загрузки, ошибки,
-остановка и повторный запуск. Упражнения, Error Mode и игровая логика относятся к следующим этапам.
+Реализованы камера, скелет, распознавание приседаний, счётчик корректных повторений
+и подсказки по глубине, коленям, корпусу и выпрямлению. Остальная игровая логика остаётся на следующих этапах.
+
+**Этап 2:** [полный код, интеграция, thresholds, тесты и ограничения](SQUAT_DETECTOR.md).
+Новых npm-зависимостей для него не требуется. После запуска встань лицом к камере,
+покажи плечи, таз, колени и лодыжки, затем постой прямо примерно секунду для калибровки.
 
 ## 1. Пакеты и установка
 
@@ -53,19 +57,31 @@ src/
   App.tsx
   types/pose.ts
   hooks/usePoseDetection.ts
+  hooks/useSquatExercise.ts
+  exercise-engine/
+    angles.ts
+    types.ts
+    squatDetector.ts
   components/
     Camera/CameraView.tsx
     Camera/CameraView.css
     PoseOverlay/PoseOverlay.tsx
+    ExerciseFeedback/ExerciseFeedback.tsx
+    ExerciseFeedback/ExerciseFeedback.css
   tests/usePoseDetection.test.tsx
+  tests/squatDetector.test.ts
+  tests/useSquatExercise.test.tsx
+  tests/ExerciseFeedback.test.tsx
+  tests/fixtures/squatFrames.ts
 README.md
-IMPLEMENTATION.md              # полный код файлов с путями
+IMPLEMENTATION.md              # архив кода этапа 1
+SQUAT_DETECTOR.md              # полный код этапа 2
 ```
 
 ## 3. Как работает
 
 `usePoseDetection(videoRef, enabled, restartKey)` владеет камерой, моделью и detection loop.
-Возвращает `landmarks`, `isLoading`, `error`, `isPersonDetected`, состояния камеры/движка
+Возвращает `landmarks`, `worldLandmarks`, `poseTimestampMs`, `isLoading`, `error`, `isPersonDetected`, состояния камеры/движка
 и фактический размер видео. Координаты landmarks остаются исходными, без зеркального преобразования.
 
 - Камера: ideal 1280×720, `facingMode: user`, без аудио.
@@ -94,6 +110,13 @@ IMPLEMENTATION.md              # полный код файлов с путям�
 Все модели, WASM, JavaScript и стили обслуживаются с адреса приложения.
 Видео, кадры и landmarks не отправляются в сеть и не сохраняются.
 
+`useSquatExercise` передаёт каждый новый кадр в один экземпляр `SquatDetector`.
+3D world landmarks используются для углов и относительных расстояний, а normalized
+landmarks — для проверки видимости и границ кадра. Полный цикл стоя → вниз → низ → вверх → стоя
+даёт один реп при выполнении порогов. Ошибки техники, подтверждённые в течение 180 мс,
+запоминаются до конца попытки. Потеря трекинга отменяет попытку и требует повторной калибровки;
+накопленный счётчик сохраняется до нажатия «СБРОСИТЬ СЧЁТЧИК» или перезагрузки страницы.
+
 ## 4. Как проверить MediaPipe
 
 1. Открой страницу и разреши доступ к камере.
@@ -106,6 +129,11 @@ IMPLEMENTATION.md              # полный код файлов с путям�
 8. Нажми `START CAMERA`: должен появиться один поток и один движущийся скелет.
 9. Повтори stop/start несколько раз; закрой страницу и проверь индикатор камеры.
 10. Проверь отказ в доступе, отключённую webcam и изменение размера окна.
+
+Для проверки приседаний дождись калибровки и сделай три полных приседа с короткой
+паузой стоя между ними. Счётчик должен стать 3. Затем проверь мелкий присед,
+сведение коленей, сильный наклон корпуса и остановку на полуподъёме.
+Подробная матрица сценариев находится в [SQUAT_DETECTOR.md](SQUAT_DETECTOR.md).
 
 В DevTools → Network модель `.task` и выбранные `.wasm`/`.js` файлы должны возвращаться
 с кодом 200. В Console не должно быть необработанных ошибок. Повторяющихся запросов
@@ -126,11 +154,12 @@ HTTP localhost/127.0.0.1 подходит для локальной разраб
 ### Выполненные проверки
 
 - TypeScript и production build проходят.
-- 18 unit-тестов проходят: StrictMode, поздние camera/model promises, retry,
-  throttle и новые кадры, пропадание человека, ошибки камеры/модели/inference,
-  ожидание видео, mute/hidden, pagehide, stop/start и cleanup.
+- Автоматические тесты охватывают lifecycle камеры, копирование world landmarks,
+  геометрию, четыре фазы приседа, ошибки техники, неполное выпрямление, debounce,
+  cooldown, потерю трекинга, масштаб тела, StrictMode hook и панель feedback.
 - Проверено наличие модели и WASM в production output.
-- Тесты используют подмены browser/MediaPipe API. Они проверяют lifecycle, а не точность модели.
+- Тесты камеры используют подмены browser/MediaPipe API, а тесты движений — синтетические
+  последовательности суставов. Они проверяют алгоритм, но не точность модели на реальных людях.
 - Проверка в браузере с настоящей камерой остаётся ручной: инструмент браузера
   сообщил об отказе в разрешении открыть локальную страницу.
 
@@ -160,38 +189,35 @@ npm run prepare:assets
 
 ## 6. Git-инструкции
 
-В текущей папке исходно не было `.git`. Коммиты и push автоматически не выполнялись.
-
-Если работаешь в существующем клоне с настроенным `origin` и веткой `main`, перед работой:
+Основная ветка репозитория — `main`. По заданию этап 2 реализуется в `feature/squat-detector`.
+Для создания такой ветки в свежем клоне:
 
 ```bash
 git checkout main
 git pull
-git checkout -b feature/pose-detection
+git checkout -b feature/squat-detector
 ```
 
 После реализации:
 
 ```bash
 git add .
-git commit -m "feat: integrate webcam pose detection"
-git push -u origin feature/pose-detection
+git commit -m "feat: implement squat detection state machine"
+git push -u origin feature/squat-detector
 ```
 
-Для этой новой папки сначала можно выполнить `git init -b main`, затем
-`git checkout -b feature/pose-detection`. Перед push добавь свой remote:
-`git remote add origin <URL_РЕПОЗИТОРИЯ>`. Это подходит для нового пустого remote;
-если remote уже содержит историю, сначала клонируй его и перенеси файлы проекта.
+Если ветка уже существует, используй `git checkout feature/squat-detector` и
+`git pull --ff-only`. Перед push проверяй обновления коллабораторов через `git fetch origin`.
 
 Альтернатива — три отдельных коммита:
 
-1. `chore: scaffold React TypeScript Vite app` — конфигурация, зависимости, entry points.
-2. `feat: add webcam pose tracking and skeleton overlay` — hook, assets, типы, камера и overlay.
-3. `test: cover pose lifecycle and document setup` — тесты и документация.
+1. `feat: implement squat detection state machine` — геометрия, конфиг, FSM, проверки движений.
+2. `feat: connect squat detector to training UI` — world landmarks, hook, feedback, интеграционные тесты.
+3. `docs: document squat calibration and validation` — запуск, настройка, проверки, полный код.
 
 ## Официальные источники
 
 - [MediaPipe Pose Landmarker для Web](https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker/web_js)
 - [Vite — Getting Started](https://vite.dev/guide/)
 
-Следующий этап сможет использовать `landmarks` как вход Exercise Engine.
+Следующий этап сможет использовать `repJustCounted`, `formStatus` и `errorCode` для игровой логики.
