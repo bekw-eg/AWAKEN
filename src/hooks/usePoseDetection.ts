@@ -4,6 +4,8 @@ import type { PoseState, UsePoseDetectionResult } from '../types/pose';
 
 const INITIAL: PoseState = {
   landmarks: null,
+  worldLandmarks: null,
+  poseTimestampMs: null,
   cameraStatus: 'idle',
   engineStatus: 'idle',
   error: null,
@@ -102,6 +104,8 @@ export function usePoseDetection(
       setState((previous) => ({
         ...previous,
         landmarks: null,
+        worldLandmarks: null,
+        poseTimestampMs: null,
         cameraStatus: failedStage === 'camera' ? 'error' : 'idle',
         engineStatus: failedStage === 'engine' ? 'error' : 'idle',
         error: message,
@@ -111,7 +115,7 @@ export function usePoseDetection(
     const onPageHide = () => { dispose(); setState(INITIAL); };
     const onVisibilityChange = () => {
       if (document.hidden && !cancelled) {
-        setState((previous) => ({ ...previous, landmarks: null }));
+        setState((previous) => ({ ...previous, landmarks: null, worldLandmarks: null, poseTimestampMs: null }));
       }
     };
     window.addEventListener('pagehide', onPageHide);
@@ -131,9 +135,12 @@ export function usePoseDetection(
           const result = detector.detectForVideo(video, timestamp);
           try {
             const landmarks = result.landmarks[0]?.map((point) => ({ ...point })) ?? null;
+            const worldLandmarks = result.worldLandmarks?.[0]?.map((point) => ({ ...point })) ?? null;
             setState((previous) => ({
               ...previous,
               landmarks: landmarks?.length ? landmarks : null,
+              worldLandmarks: landmarks?.length && worldLandmarks?.length ? worldLandmarks : null,
+              poseTimestampMs: timestamp,
               videoSize: { width: video.videoWidth, height: video.videoHeight },
             }));
           } finally {
@@ -166,7 +173,7 @@ export function usePoseDetection(
         const tracks = acquired.getVideoTracks();
         const ended = () => fail('CAMERA DISCONNECTED. Reconnect your webcam, then retry.', 'camera');
         const muted = () => {
-          if (!cancelled) setState((previous) => ({ ...previous, landmarks: null, cameraStatus: 'starting' }));
+          if (!cancelled) setState((previous) => ({ ...previous, landmarks: null, worldLandmarks: null, poseTimestampMs: null, cameraStatus: 'starting' }));
         };
         const unmuted = () => {
           if (!cancelled) setState((previous) => ({ ...previous, cameraStatus: 'active' }));

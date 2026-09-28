@@ -148,12 +148,16 @@ describe('pose lifecycle', () => {
   it('processes only new frames, throttles inference, and clears a missing person', async () => {
     const release = vi.fn();
     const point = { x: 0.5, y: 0.3, z: 0, visibility: 1 };
-    detector.detectForVideo.mockReturnValueOnce({ landmarks: [[point]], close: release });
+    const worldPoint = { x: 0.1, y: 0.2, z: -0.3, visibility: 1 };
+    detector.detectForVideo.mockReturnValueOnce({ landmarks: [[point]], worldLandmarks: [[worldPoint]], close: release });
     const { result } = renderHook(() => usePoseDetection(videoRef));
     await start();
     tick(100, 1);
     expect(result.current.isPersonDetected).toBe(true);
     expect(result.current.landmarks?.[0]).not.toBe(point);
+    expect(result.current.worldLandmarks?.[0]).toEqual(worldPoint);
+    expect(result.current.worldLandmarks?.[0]).not.toBe(worldPoint);
+    expect(result.current.poseTimestampMs).toBe(100);
     expect(release).toHaveBeenCalledTimes(1);
     tick(160, 1); // Same video frame, despite elapsed time.
     tick(170, 2);
@@ -161,6 +165,7 @@ describe('pose lifecycle', () => {
     expect(detector.detectForVideo).toHaveBeenCalledTimes(2);
     expect(result.current.isPersonDetected).toBe(false);
     expect(result.current.landmarks).toBeNull();
+    expect(result.current.worldLandmarks).toBeNull();
     expect(frames.size).toBe(1);
   });
 
