@@ -1,16 +1,20 @@
+import { useStableText } from '../../motion/Motion';
 import type { JumpingJackDetectionResult } from '../../exercise-engine/types';
 import { Icon } from '../UI/Icon';
+import { RepCounter } from '../UI/RepCounter';
+import { PhaseText, FeedbackText } from '../UI/MotionText';
 import '../ExerciseFeedback/ExerciseFeedback.css';
 
 export type JumpingJackFeedbackProps = { result: JumpingJackDetectionResult; onReset: () => void };
 export function JumpingJackFeedback({ result, onReset }: JumpingJackFeedbackProps) {
-  return <section className={`exercise-feedback form-${result.formStatus}`} aria-labelledby="jumping-jack-title">
+  const stableForm = useStableText(result.formStatus);
+  return <section className={`exercise-feedback form-${stableForm}`} aria-labelledby="jumping-jack-title">
     <header className="exercise-header"><div><p className="eyebrow">FAST ATTACK · TRAINING</p><h2 id="jumping-jack-title">JUMPING JACK</h2></div><button type="button" onClick={onReset} aria-label="Reset jumping jack counter"><Icon name="RotateCcw" />RESET</button></header>
     <div className="exercise-summary">
-      <div className="rep-counter"><span className={`rep-value${result.repJustCounted ? ' rep-flash' : ''}`}>{result.repCount}</span><span>VALID REPS</span></div>
-      <div className="exercise-state"><p className="exercise-phase">PHASE <strong>{result.phase.toUpperCase()}</strong></p>
-        <p className="form-badge">{result.formStatus === 'good' ? 'GOOD FORM' : result.formStatus === 'error' ? 'FORM ERROR' : 'WAITING'}</p>
-        <p className="exercise-message" role="status">{result.feedback || (result.trackingStatus === 'ready' ? 'Open fully, then return to your starting position.' : 'SEARCHING FOR USER')}</p>
+      <RepCounter value={result.repCount} series />
+      <div className="exercise-state"><p className="exercise-phase">PHASE <PhaseText phase={result.phase} /></p>
+        <p className="form-badge">{stableForm === 'good' ? 'GOOD FORM' : stableForm === 'error' ? 'FORM ERROR' : 'WAITING'}</p>
+        <p className="exercise-message" role="status"><FeedbackText text={result.feedback || (result.trackingStatus === 'ready' ? 'Open fully, then return to your starting position.' : 'SEARCHING FOR USER')} /></p>
       </div>
     </div>
     <details className="exercise-debug"><summary>DEBUG METRICS</summary><dl>

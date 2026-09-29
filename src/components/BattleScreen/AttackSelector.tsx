@@ -7,9 +7,9 @@ export const ATTACKS: { exercise: ExerciseType; title: string; label: string; ic
   { exercise: 'squat', title: 'Squat', label: 'Basic attack', icon: 'Activity', stat: 'power', shortStat: 'POW', description: 'Balanced damage' },
 ];
 
-export function AttackSelector({ selected, onSelect, player, performing, completed, disabled = false }: {
+export function AttackSelector({ selected, onSelect, player, performing, completed, disabled = false, eventId = 0 }: {
   selected: ExerciseType; onSelect: (exercise: ExerciseType) => void; player: PlayerState;
-  performing: boolean; completed: boolean; disabled?: boolean;
+  performing: boolean; completed: boolean; disabled?: boolean; eventId?: number;
 }) {
   return <section className="attack-selection" aria-labelledby="attack-title">
     <div className="section-title"><h2 id="attack-title">Choose your attack</h2><span>One correct rep. One hit.</span></div>
@@ -22,7 +22,7 @@ export function AttackSelector({ selected, onSelect, player, performing, complet
           <span className="attack-card-top"><Icon name={attack.icon} /><span>{isSelected ? <Icon name="CheckCircle" /> : `0${index + 1}`}</span></span>
           <span className="attack-label">{attack.label}</span><strong className="attack-name">{attack.title}</strong>
           <span className="attack-detail">{attack.description}<span>{attack.shortStat} {player[attack.stat]}</span></span>
-          <span className="attack-card-footer"><span>{state === 'completed' ? 'HIT CONFIRMED' : state === 'performing' ? 'PERFORMING' : isSelected ? 'SELECTED · 1 REP / HIT' : '1 CORRECT REP / HIT'}</span><Icon name={state === 'completed' ? 'Check' : 'ArrowRight'} /></span>
+          <span key={isSelected ? eventId : 'idle'} className="attack-card-footer"><span>{state === 'completed' ? 'EXERCISE COMPLETE · HIT CONFIRMED' : state === 'performing' ? 'PERFORMING' : isSelected ? 'SELECTED · 1 REP / HIT' : '1 CORRECT REP / HIT'}</span><Icon name={state === 'completed' ? 'Check' : 'ArrowRight'} /></span>
         </button>;
       })}
     </div>

@@ -1,3 +1,4 @@
+import { AnimatedNumber } from '../UI/AnimatedNumber';
 import type { GameState } from '../../game/types';
 import { generateEnemy } from '../../game/progression';
 import { DailyQuest } from '../DailyQuest/DailyQuest';
@@ -13,9 +14,11 @@ type Props = {
   onStartWorkout: () => void;
   onStartBattle: () => void;
   journeyOnly?: boolean;
+  journeyChange?: number | null;
+  onJourneyAnimated?: () => void;
 };
 
-export function MainScreen({ state, onStartWorkout, onStartBattle, journeyOnly = false }: Props) {
+export function MainScreen({ state, onStartWorkout, onStartBattle, journeyOnly = false, journeyChange, onJourneyAnimated }: Props) {
   const nextEnemy = generateEnemy(state.currentEnemyIndex);
   const completed = state.currentEnemyIndex - 1;
   return <div className="main-screen">
@@ -32,10 +35,10 @@ export function MainScreen({ state, onStartWorkout, onStartBattle, journeyOnly =
           </div>
         </section>
         <section className="journey-panel" aria-labelledby="journey-title">
-          <div className="section-title"><div><p className="eyebrow">CAMPAIGN / TRAINING GROUNDS</p><h2 id="journey-title">The ascent</h2></div><span className="journey-completion"><strong>{String(completed).padStart(2, '0')}</strong> / 10 cleared</span></div>
+          <div className="section-title"><div><p className="eyebrow">CAMPAIGN / TRAINING GROUNDS</p><h2 id="journey-title">The ascent</h2></div><span className="journey-completion"><strong><AnimatedNumber value={completed} pad={2} /></strong> / 10 cleared</span></div>
           <ProgressBar value={completed} max={10} label="Journey completed encounters" />
           <div className="map-legend"><span><i className="legend-current" />Current</span><span><Icon name="Check" />Cleared</span><span><Icon name="Lock" />Locked</span></div>
-          <JourneyMap currentEnemyIndex={state.currentEnemyIndex} onStartBattle={onStartBattle} />
+          <JourneyMap currentEnemyIndex={state.currentEnemyIndex} onStartBattle={onStartBattle} completedEvent={journeyChange} onAnimated={onJourneyAnimated} />
         </section>
       </div>
       <aside className="journey-aside" aria-label="Player progression">

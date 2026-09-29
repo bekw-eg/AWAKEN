@@ -28,19 +28,19 @@ it('emits one push-up game event on real frames and preserves count across modes
     act(() => vi.advanceTimersByTime(50));
     view.rerender(<CameraView onExerciseEvent={onExerciseEvent} />);
   }
-  expect(screen.getByText('1')).toBeTruthy();
+  expect(document.querySelector('.rep-value .animated-number')?.getAttribute('aria-label')).toBe('1');
   expect(onExerciseEvent).toHaveBeenCalledExactlyOnceWith({ exercise: 'push-up', status: 'correct', timestamp: expect.any(Number) });
   fireEvent.click(screen.getByRole('button', { name: 'SQUAT' }));
   expect(screen.getByRole('heading', { name: 'SQUAT TRAINING' })).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'PUSH-UP' }));
-  expect(screen.getByText('1')).toBeTruthy();
+  expect(document.querySelector('.rep-value .animated-number')?.getAttribute('aria-label')).toBe('1');
   expect(onExerciseEvent).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole('button', { name: 'JUMPING JACK' }));
   expect(screen.getByRole('heading', { name: 'JUMPING JACK' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'JUMPING JACK' }).getAttribute('aria-pressed')).toBe('true');
   fireEvent.click(screen.getByRole('button', { name: 'PUSH-UP' }));
   expect(screen.getByRole('button', { name: 'PUSH-UP' }).getAttribute('aria-pressed')).toBe('true');
-  expect(screen.getByText('1')).toBeTruthy();
+  expect(document.querySelector('.rep-value .animated-number')?.getAttribute('aria-label')).toBe('1');
 });
 
 it('keeps squat game events connected after combining exercise modes', () => {
@@ -59,11 +59,11 @@ it('keeps squat game events connected after combining exercise modes', () => {
     act(() => vi.advanceTimersByTime(50));
     view.rerender(<CameraView onExerciseEvent={onExerciseEvent} />);
   }
-  expect(screen.getByText('1')).toBeTruthy();
+  expect(document.querySelector('.rep-value .animated-number')?.getAttribute('aria-label')).toBe('1');
   expect(onExerciseEvent).toHaveBeenCalledExactlyOnceWith({ exercise: 'squat', status: 'correct', timestamp: expect.any(Number) });
   fireEvent.click(screen.getByRole('button', { name: 'JUMPING JACK' }));
   fireEvent.click(screen.getByRole('button', { name: 'SQUAT' }));
-  expect(screen.getByText('1')).toBeTruthy();
+  expect(document.querySelector('.rep-value .animated-number')?.getAttribute('aria-label')).toBe('1');
   expect(onExerciseEvent).toHaveBeenCalledTimes(1);
 });
 
@@ -87,10 +87,10 @@ it('counts jumping jacks and keeps their counter when switching to other modes',
       view.rerender(<CameraView onExerciseEvent={onExerciseEvent} />);
     }
   }
-  expect(screen.getByText('1')).toBeTruthy();
+  expect(document.querySelector('.rep-value .animated-number')?.getAttribute('aria-label')).toBe('1');
   fireEvent.click(screen.getByRole('button', { name: 'PUSH-UP' }));
   expect(screen.getByText('0')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'JUMPING JACK' }));
-  expect(screen.getByText('1')).toBeTruthy();
+  expect(document.querySelector('.rep-value .animated-number')?.getAttribute('aria-label')).toBe('1');
   expect(onExerciseEvent).toHaveBeenCalledExactlyOnceWith({ exercise: 'jumping-jack', status: 'correct', timestamp: expect.any(Number) });
 });

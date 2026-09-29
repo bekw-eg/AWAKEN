@@ -9,7 +9,7 @@
 .exercise-summary { display: grid; gap: 24px; margin: 24px 0 20px; }
 .rep-counter { display: flex; align-items: baseline; gap: 12px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
 .rep-value { display: inline-block; font-size: 56px; line-height: 1; font-weight: 500; letter-spacing: -2px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
-.rep-counter > span:last-child { font-size: 9px; color: var(--text-muted); letter-spacing: 1px; }
+.rep-counter > span:nth-child(2) { font-size: 9px; color: var(--text-muted); letter-spacing: 1px; }
 .exercise-state { min-width: 0; }
 .exercise-phase { display: flex; justify-content: space-between; gap: 8px; margin: 0; color: var(--text-muted); font-size: 9px; letter-spacing: .6px; }
 .exercise-phase strong { color: var(--text-primary); font-weight: 500; }
@@ -22,7 +22,5 @@
 .exercise-debug dl { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
 .exercise-debug dd { color: var(--text-secondary); font-size: 13px; margin: 4px 0 0; font-variant-numeric: tabular-nums; }
 .exercise-tip { font-size: 10px; line-height: 1.7; color: var(--text-muted); margin: 14px 0 0; }
-.rep-flash { animation: rep-confirm 250ms ease-out; }
-@keyframes rep-confirm { from { color: var(--accent); transform: translateY(3px); } to { transform: translateY(0); } }
 @media (max-width: 1000px) { .exercise-summary { grid-template-columns: 110px 1fr; gap: 24px; align-items: start; margin-top: 20px; } .rep-counter { flex-direction: column; gap: 10px; border-bottom: 0; padding-bottom: 0; border-right: 1px solid var(--border); } .exercise-debug dl { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 540px) { .exercise-summary { grid-template-columns: 80px 1fr; gap: 20px; } .rep-value { font-size: 48px; } .rep-counter > span:last-child { font-size: 8px; } .exercise-debug dl { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 540px) { .exercise-summary { grid-template-columns: 80px 1fr; gap: 20px; } .rep-value { font-size: 48px; } .rep-counter > span:nth-child(2) { font-size: 8px; } .exercise-debug dl { grid-template-columns: 1fr 1fr; } }

@@ -1,3 +1,4 @@
+import { AnimatedNumber } from '../UI/AnimatedNumber';
 import type { PlayerState } from '../../game/types';
 import { Icon, type IconName } from '../UI/Icon';
 import { ProgressBar } from '../UI/ProgressBar';
@@ -14,11 +15,11 @@ const stats: { key: keyof PlayerState; label: string; icon: IconName }[] = [
 export function PlayerStats({ player }: { player: PlayerState }) {
   return <section className="game-card hunter-status" aria-labelledby="hunter-title">
     <div className="section-title"><h2 id="hunter-title">Player status</h2><Icon name="User" /></div>
-    <div className="hunter-level"><div><span className="label">LEVEL</span><strong>{String(player.level).padStart(2, '0')}</strong></div><span className="badge">PLAYER</span></div>
-    <div className="stat-progress-label"><span>Experience</span><span><strong>{player.xp}</strong> / {player.xpToNextLevel} XP</span></div>
+    <div className="hunter-level"><div><span className="label">LEVEL</span><strong><AnimatedNumber value={player.level} pad={2} /></strong></div><span className="badge">PLAYER</span></div>
+    <div className="stat-progress-label"><span>Experience</span><span><strong><AnimatedNumber value={player.xp} /></strong> / {player.xpToNextLevel} XP</span></div>
     <ProgressBar value={player.xp} max={player.xpToNextLevel} label="Level progress" />
-    <div className="hunter-health"><Icon name="Heart" /><span>Health</span><strong>{player.hp}<small> / {player.maxHp}</small></strong></div>
-    <dl className="hunter-stats">{stats.map(({ key, label, icon }) => <div key={key}><dt><Icon name={icon} />{label}</dt><dd>{player[key]}</dd></div>)}</dl>
-    <div className="hunter-gold"><Icon name="Award" /><span>Gold earned</span><strong>{player.gold.toLocaleString()}</strong></div>
+    <div className="hunter-health"><Icon name="Heart" /><span>Health</span><strong><AnimatedNumber value={player.hp} /><small> / {player.maxHp}</small></strong></div>
+    <dl className="hunter-stats">{stats.map(({ key, label, icon }) => <div key={key}><dt><Icon name={icon} />{label}</dt><dd><AnimatedNumber value={player[key]} /></dd></div>)}</dl>
+    <div className="hunter-gold"><Icon name="Award" /><span>Gold earned</span><strong><AnimatedNumber value={player.gold} /></strong></div>
   </section>;
 }
