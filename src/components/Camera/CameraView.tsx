@@ -1,4 +1,6 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
+import type { ExerciseEvent } from '../../game/types';
+import { useSquatGameEvents } from '../../hooks/useSquatGameEvents';
 import { usePoseDetection } from '../../hooks/usePoseDetection';
 import { useSquatExercise } from '../../hooks/useSquatExercise';
 import { useJumpingJackExercise } from '../../hooks/useJumpingJackExercise';
@@ -7,7 +9,10 @@ import { JumpingJackFeedback } from '../JumpingJackFeedback/JumpingJackFeedback'
 import { PoseOverlay } from '../PoseOverlay/PoseOverlay';
 import './CameraView.css';
 
-export function CameraView() {
+export function CameraView({ onExerciseEvent, children }: {
+  onExerciseEvent: (event: ExerciseEvent) => void;
+  children?: ReactNode;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [enabled, setEnabled] = useState(true);
   const [restartKey, setRestartKey] = useState(0);
@@ -33,7 +38,7 @@ export function CameraView() {
     <main className="system-shell">
       <header className="topbar">
         <a className="wordmark" href="#main">AWAKEN<span className="brand-mark">◇</span></a>
-        <span className="chapter">SYSTEM / 02 <span>BODY INTERFACE</span></span>
+        <span className="chapter">SYSTEM / 03 <span>HUNTER PROGRESSION</span></span>
       </header>
       <section className="camera-system" id="main" aria-labelledby="page-title">
         <div className="section-heading">
@@ -49,6 +54,11 @@ export function CameraView() {
           </select>
         </div>
         <p className="intro">Your body is the controller. Step into the frame.</p>
+        {children}
+        <div className="exercise-mode-selector" role="group" aria-label="Exercise mode">
+          <button type="button" aria-pressed={mode === 'squat'} onClick={() => setMode('squat')}>SQUAT</button>
+          <button type="button" aria-pressed={mode === 'push-up'} onClick={() => setMode('push-up')}>PUSH-UP</button>
+        </div>
 
         <div className="camera-panel">
           <div className="panel-bar"><span><i className={cameraStatus === 'active' ? 'dot active' : 'dot'} /> LIVE CAMERA</span><span>MIRRORED VIEW</span></div>
