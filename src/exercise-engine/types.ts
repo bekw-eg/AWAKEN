@@ -75,3 +75,47 @@ export type SquatConfig = {
   smoothingTimeMs: number;
   maxFrameGapMs: number;
 };
+
+export type JumpingJackPhase = 'closed' | 'opening' | 'open' | 'closing';
+export type JumpingJackErrorCode = 'arms_too_low' | 'legs_too_narrow' | 'incomplete_return';
+
+export type JumpingJackFrame = {
+  landmarks: readonly PosePoint[] | null;
+  worldLandmarks: readonly PosePoint[] | null;
+  timestampMs: number;
+};
+
+export type JumpingJackMetrics = {
+  ankleWidthRatio: number | null;
+  leftWristHeightRatio: number | null;
+  rightWristHeightRatio: number | null;
+};
+
+export type JumpingJackDetectionResult = {
+  phase: JumpingJackPhase;
+  repCount: number;
+  repJustCounted: boolean;
+  formStatus: 'idle' | 'good' | 'error';
+  feedback: string | null;
+  errorCode: JumpingJackErrorCode | null;
+  metrics: JumpingJackMetrics;
+  trackingStatus: TrackingStatus;
+};
+
+export type JumpingJackConfig = {
+  minVisibility: number;
+  minPresence: number;
+  maxFrameGapMs: number;
+
+  closedAnkleRatioMax: number;
+  openAnkleRatioMin: number;
+
+  openWristHeightRatioMax: number; // Smaller Y is higher. 0 = top of screen.
+  
+  transitionHoldMs: number;
+  openHoldMs: number;
+  closedHoldMs: number;
+
+  formErrorHoldMs: number;
+  repCooldownMs: number;
+};
