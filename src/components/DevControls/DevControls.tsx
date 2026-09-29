@@ -12,7 +12,7 @@ export function DevControls({ onExerciseEvent, onReset }: {
       <div>
         <button type="button" onClick={() => simulate('squat')}>SIMULATE SQUAT</button>
         <button type="button" onClick={() => simulate('jumping-jack')}>SIMULATE JUMPING JACK</button>
-        <button type="button" onClick={() => simulate('knee-raise')}>SIMULATE KNEE RAISE</button>
+        <button type="button" onClick={() => simulate('push-up')}>SIMULATE PUSH UP</button>
         <button type="button" onClick={onReset}>RESET GAME</button>
       </div>
     </aside>

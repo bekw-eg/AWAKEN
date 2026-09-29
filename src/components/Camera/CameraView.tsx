@@ -13,14 +13,20 @@ import './CameraView.css';
 
 type ExerciseType = 'squat' | 'jumping-jack' | 'push-up';
 
-export function CameraView({ onExerciseEvent, children }: {
+export function CameraView({ onExerciseEvent, children, forcedExerciseType, onExerciseChange, hideSelector }: {
   onExerciseEvent: (event: ExerciseEvent) => void;
   children?: ReactNode;
+  forcedExerciseType?: ExerciseType;
+  onExerciseChange?: (type: ExerciseType) => void;
+  hideSelector?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [enabled, setEnabled] = useState(true);
   const [restartKey, setRestartKey] = useState(0);
-  const [exerciseType, setExerciseType] = useState<ExerciseType>('squat');
+  const [internalExerciseType, setInternalExerciseType] = useState<ExerciseType>('squat');
+  
+  const exerciseType = forcedExerciseType || internalExerciseType;
+  const setExerciseType = onExerciseChange || setInternalExerciseType;
 
   const { landmarks, worldLandmarks, poseTimestampMs, videoSize, cameraStatus, engineStatus, isLoading, error, isPersonDetected } =
     usePoseDetection(videoRef, enabled, restartKey);
@@ -47,27 +53,31 @@ export function CameraView({ onExerciseEvent, children }: {
         <span className="chapter">SYSTEM / 03 <span>HUNTER PROGRESSION</span></span>
       </header>
       <section className="camera-system" id="main" aria-labelledby="page-title">
-        <div className="section-heading">
-          <div><p className="eyebrow">REAL-WORLD INPUT · ONLINE POTENTIAL</p><h1 id="page-title">CAMERA <span>SYSTEM</span></h1></div>
-          <select
-            className="stage-tag"
-            aria-label="Exercise mode"
-            value={exerciseType}
-            onChange={(e) => setExerciseType(e.target.value as ExerciseType)}
-            style={{ background: 'transparent', color: '#38bdf8', border: '1px solid currentColor', cursor: 'pointer', padding: '4px 8px', outline: 'none' }}
-          >
-            <option value="squat" style={{color: 'black'}}>PHASE 01 / SQUAT</option>
-            <option value="jumping-jack" style={{color: 'black'}}>PHASE 02 / JUMPING JACK</option>
-            <option value="push-up" style={{color: 'black'}}>PHASE 03 / PUSH-UP</option>
-          </select>
-        </div>
+        {!hideSelector && (
+          <div className="section-heading">
+            <div><p className="eyebrow">REAL-WORLD INPUT · ONLINE POTENTIAL</p><h1 id="page-title">CAMERA <span>SYSTEM</span></h1></div>
+            <select
+              className="stage-tag"
+              aria-label="Exercise mode"
+              value={exerciseType}
+              onChange={(e) => setExerciseType(e.target.value as ExerciseType)}
+              style={{ background: 'transparent', color: '#38bdf8', border: '1px solid currentColor', cursor: 'pointer', padding: '4px 8px', outline: 'none' }}
+            >
+              <option value="squat" style={{color: 'black'}}>PHASE 01 / SQUAT</option>
+              <option value="jumping-jack" style={{color: 'black'}}>PHASE 02 / JUMPING JACK</option>
+              <option value="push-up" style={{color: 'black'}}>PHASE 03 / PUSH-UP</option>
+            </select>
+          </div>
+        )}
         <p className="intro">Your body is the controller. Step into the frame.</p>
         {children}
-        <div className="exercise-mode-selector" role="group" aria-label="Exercise mode">
-          <button type="button" aria-pressed={exerciseType === 'squat'} onClick={() => setExerciseType('squat')}>SQUAT</button>
-          <button type="button" aria-pressed={exerciseType === 'jumping-jack'} onClick={() => setExerciseType('jumping-jack')}>JUMPING JACK</button>
-          <button type="button" aria-pressed={exerciseType === 'push-up'} onClick={() => setExerciseType('push-up')}>PUSH-UP</button>
-        </div>
+        {!hideSelector && (
+          <div className="exercise-mode-selector" role="group" aria-label="Exercise mode">
+            <button type="button" aria-pressed={exerciseType === 'squat'} onClick={() => setExerciseType('squat')}>SQUAT</button>
+            <button type="button" aria-pressed={exerciseType === 'jumping-jack'} onClick={() => setExerciseType('jumping-jack')}>JUMPING JACK</button>
+            <button type="button" aria-pressed={exerciseType === 'push-up'} onClick={() => setExerciseType('push-up')}>PUSH-UP</button>
+          </div>
+        )}
 
         <div className="camera-panel">
           <div className="panel-bar"><span><i className={cameraStatus === 'active' ? 'dot active' : 'dot'} /> LIVE CAMERA</span><span>MIRRORED VIEW</span></div>
