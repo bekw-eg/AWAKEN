@@ -194,24 +194,28 @@ npm run prepare:assets
 
 ## 6. Git-инструкции
 
-Рабочая и основная ветка репозитория — `main`, включая этап 2 и исправления детектора.
-Перед работой:
+`main` — защищённая ветка по правилу пользователя. Каждая задача выполняется
+в отдельной `feature/`-ветке. Перед новой задачей при чистой рабочей копии:
 
 ```bash
 git checkout main
 git pull --ff-only
+git checkout -b feature/<название-задачи>
 ```
 
 После реализации:
 
 ```bash
+git status
 git add .
 git commit -m "feat: implement squat detection state machine"
-git push origin main
+git push -u origin feature/<название-задачи>
 ```
 
-Ветка `feature/squat-detector` сохранена как история разработки этапа 2.
-Перед push проверяй обновления коллабораторов через `git fetch origin`.
+Перед каждым изменением кода проверяй `git branch --show-current`: в `main`
+файлы изменять нельзя. Перед push проверяй обновления коллабораторов через `git fetch origin`.
+После push feature-ветки работа агента заканчивается. Пользователь сам создаёт Pull Request
+и выполняет merge; агент не мержит и не отправляет изменения напрямую в `main`.
 
 Альтернатива — три отдельных коммита:
 

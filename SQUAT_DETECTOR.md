@@ -2195,22 +2195,26 @@ descendingKneeAngleMax < standingKneeAngleMin`. Не отключай фильт
 
 ## 8. Git workflow
 
-Рабочая ветка после уточнения пользователя — `main`. Перед работой:
+`main` защищена правилом пользователя. Перед новой задачей при чистой рабочей копии:
 
 ```bash
 git checkout main
 git pull --ff-only
+git checkout -b feature/<название-задачи>
 ```
 
 После реализации:
 
 ```bash
+git status
 git add .
 git commit -m "feat: implement squat detection state machine"
-git push origin main
+git push -u origin feature/<название-задачи>
 ```
 
-Этап 2 и исправления включены в `main`. Ветка `feature/squat-detector` сохранена.
+Перед каждым изменением кода проверяй `git branch --show-current`.
+Изменения допустимы только в feature-ветке. После её push задача агента заканчивается:
+Pull Request создаёт пользователь, merge в `main` также выполняет только пользователь.
 
 Разбиение на три небольших коммита:
 
