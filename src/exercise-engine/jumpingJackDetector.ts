@@ -10,22 +10,27 @@ import type {
 } from './types';
 
 const DEFAULT_CONFIG: JumpingJackConfig = {
-  minVisibility: 0.65,
+  minVisibility: 0.55,
   minPresence: 0.5,
   maxFrameGapMs: 1000,
 
   closedAnkleRatioMax: 1.5,
-  openAnkleRatioMin: 2.2,
+  openAnkleRatioMin: 1.9,
 
-  openWristHeightRatioMax: -0.15,
+  openWristHeightRatioMax: -0.05,
 
-  transitionHoldMs: 150,
-  openHoldMs: 150,
-  closedHoldMs: 150,
+  transitionHoldMs: 100,
+  openHoldMs: 100,
+  closedHoldMs: 100,
 
-  formErrorHoldMs: 300,
-  repCooldownMs: 800,
+  formErrorHoldMs: 700,
+  repCooldownMs: 450,
 };
+
+// Image-space Y differences, not body-size ratios. One wrist may lag near shoulder height.
+const OTHER_WRIST_HEIGHT_MAX = 0.02;
+const WRIST_MOVEMENT_DELTA = 0.02;
+const ANKLE_MOVEMENT_DELTA = 0.1;
 
 const JUMPING_JACK_FEEDBACK: Record<JumpingJackErrorCode, string> = {
   arms_too_low: 'Подними руки выше',
@@ -50,9 +55,14 @@ export class JumpingJackDetector {
     rightWristHeightRatio: null,
   };
 
-  private lastTimestampMs = 0;
-  private stateChangeTimestampMs = 0;
-  private lastRepTimestampMs = 0;
+  private lastTimestampMs: number | null = null;
+  private lastReliableTimestampMs: number | null = null;
+  private lastRepTimestampMs = -Infinity;
+  private hasClosedStart = false;
+  private openSince: number | null = null;
+  private closedSince: number | null = null;
+  private transitionSince: number | null = null;
+  private pendingError: { code: JumpingJackErrorCode; since: number; anchor: JumpingJackMetrics } | null = null;
 
   constructor(config?: Partial<JumpingJackConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -61,30 +71,30 @@ export class JumpingJackDetector {
   public update(frame: JumpingJackFrame): JumpingJackDetectionResult {
     this.repJustCounted = false;
 
-    if (!frame.landmarks || !frame.worldLandmarks) {
-      return this.pause();
-    }
-
     const { timestampMs, landmarks, worldLandmarks } = frame;
-
-    if (this.lastTimestampMs === timestampMs) {
+    if (!Number.isFinite(timestampMs) || (this.lastTimestampMs !== null && timestampMs <= this.lastTimestampMs)) {
       return this.getResult();
     }
-
-    if (timestampMs - this.lastTimestampMs > this.config.maxFrameGapMs) {
-      this.resetAttempt(timestampMs);
+    // Measure the gap from usable tracking, so a stream of invisible frames cannot keep an attempt alive.
+    if (this.lastReliableTimestampMs !== null && timestampMs - this.lastReliableTimestampMs > this.config.maxFrameGapMs) {
+      this.resetAttempt();
     }
     
     this.lastTimestampMs = timestampMs;
 
-    const isValid = this.extractMetrics(landmarks, worldLandmarks);
+    const isValid = landmarks && worldLandmarks && this.extractMetrics(landmarks, worldLandmarks);
     if (!isValid) {
-      this.trackingStatus = 'unreliable';
-      this.formStatus = 'idle';
-      this.feedback = 'Покажи тело полностью';
+      // Keep the accepted phase across a brief occlusion, but never count unseen time as a hold.
+      this.clearHolds();
+      this.clearError();
+      this.clearMetrics();
+      this.trackingStatus = landmarks && worldLandmarks ? 'unreliable' : 'searching';
+      this.feedback = landmarks && worldLandmarks ? 'Покажи тело полностью' : 'SEARCHING FOR USER...';
       return this.getResult();
     }
 
+    if (this.trackingStatus !== 'ready') this.clearError();
+    this.lastReliableTimestampMs = timestampMs;
     this.trackingStatus = 'ready';
     this.processFSM(timestampMs);
 
@@ -92,6 +102,10 @@ export class JumpingJackDetector {
   }
 
   public pause(): JumpingJackDetectionResult {
+    // Explicit pause means the mode was disabled or its frame timeout expired.
+    this.repJustCounted = false;
+    this.resetAttempt();
+    this.clearMetrics();
     this.trackingStatus = 'searching';
     this.formStatus = 'idle';
     this.feedback = 'SEARCHING FOR USER...';
@@ -101,8 +115,10 @@ export class JumpingJackDetector {
   public reset(): JumpingJackDetectionResult {
     this.repCount = 0;
     this.repJustCounted = false;
-    this.resetAttempt(0);
-    return this.getResult();
+    this.lastTimestampMs = null;
+    this.lastReliableTimestampMs = null;
+    this.lastRepTimestampMs = -Infinity;
+    return this.pause();
   }
 
   public getResult(): JumpingJackDetectionResult {
@@ -118,9 +134,20 @@ export class JumpingJackDetector {
     };
   }
 
-  private resetAttempt(timestampMs: number) {
+  private clearHolds() {
+    this.openSince = null;
+    this.closedSince = null;
+    this.transitionSince = null;
+  }
+
+  private clearMetrics() {
+    this.metrics = { ankleWidthRatio: null, leftWristHeightRatio: null, rightWristHeightRatio: null };
+  }
+
+  private resetAttempt() {
     this.phase = 'closed';
-    this.stateChangeTimestampMs = timestampMs;
+    this.hasClosedStart = false;
+    this.clearHolds();
     this.clearError();
   }
 
@@ -135,7 +162,9 @@ export class JumpingJackDetector {
     for (const idx of reqLandmarks) {
       const lm = landmarks[idx];
       const wlm = worldLandmarks[idx];
-      if ((lm.visibility ?? 1) < minVis || (wlm.visibility ?? 1) < minVis) return false;
+      if ([lm, wlm].some(point => !point || ![point.x, point.y, point.z].every(Number.isFinite)
+        || !Number.isFinite(point.visibility ?? 1) || (point.visibility ?? 1) < minVis
+        || !Number.isFinite(point.presence ?? 1) || (point.presence ?? 1) < this.config.minPresence)) return false;
     }
 
     // Normalized Ankle Width Ratio using world landmarks
@@ -149,7 +178,7 @@ export class JumpingJackDetector {
     
     this.metrics.ankleWidthRatio = normalizedRatio(ankleWidth, shoulderWidth);
 
-    // Wrist height relative to shoulder (2D landmarks, Y goes down)
+    // Legacy API names: these are differences in normalized image Y, not actual ratios.
     const lShoulder = landmarks[11];
     const rShoulder = landmarks[12];
     const lWrist = landmarks[15];
@@ -158,80 +187,91 @@ export class JumpingJackDetector {
     this.metrics.leftWristHeightRatio = lWrist.y - lShoulder.y;
     this.metrics.rightWristHeightRatio = rWrist.y - rShoulder.y;
 
-    return true;
+    return this.metrics.ankleWidthRatio !== null;
   }
 
   private processFSM(timestampMs: number) {
     const { ankleWidthRatio, leftWristHeightRatio, rightWristHeightRatio } = this.metrics;
     if (ankleWidthRatio === null || leftWristHeightRatio === null || rightWristHeightRatio === null) return;
 
-    const armsAreHigh = leftWristHeightRatio < this.config.openWristHeightRatioMax && rightWristHeightRatio < this.config.openWristHeightRatioMax;
+    const armsAreHigh =
+      (leftWristHeightRatio < this.config.openWristHeightRatioMax && rightWristHeightRatio < OTHER_WRIST_HEIGHT_MAX) ||
+      (rightWristHeightRatio < this.config.openWristHeightRatioMax && leftWristHeightRatio < OTHER_WRIST_HEIGHT_MAX);
     const legsAreWide = ankleWidthRatio > this.config.openAnkleRatioMin;
     const isClosedPosition = ankleWidthRatio < this.config.closedAnkleRatioMax && leftWristHeightRatio > 0 && rightWristHeightRatio > 0;
+    const isOpenPosition = armsAreHigh && legsAreWide;
+    this.openSince = isOpenPosition ? this.openSince ?? timestampMs : null;
+    this.closedSince = isClosedPosition ? this.closedSince ?? timestampMs : null;
+    const held = (since: number | null, duration: number) => since !== null && timestampMs - since >= duration;
 
-    const timeInState = timestampMs - this.stateChangeTimestampMs;
+    // Starting the camera in an open pose is not the start of a rep.
+    if (!this.hasClosedStart) {
+      if (held(this.closedSince, this.config.closedHoldMs)) {
+        this.hasClosedStart = true;
+        this.clearError();
+      }
+      return;
+    }
 
     switch (this.phase) {
       case 'closed': {
-        if (!isClosedPosition && timeInState > this.config.transitionHoldMs) {
-          this.setPhase('opening', timestampMs);
-        }
+        this.transitionSince = !isClosedPosition ? this.transitionSince ?? timestampMs : null;
+        if (held(this.transitionSince, this.config.transitionHoldMs)) this.setPhase('opening');
         break;
       }
       
       case 'opening': {
-        if (armsAreHigh && legsAreWide) {
-          if (timeInState > this.config.openHoldMs) {
-            this.setPhase('open', timestampMs);
-          }
-        } else if (isClosedPosition && timeInState > this.config.formErrorHoldMs) {
-          // Returned back without fully opening
-          if (!armsAreHigh) this.setError('arms_too_low');
-          else if (!legsAreWide) this.setError('legs_too_narrow');
-          this.setPhase('closed', timestampMs);
-        } else if (timeInState > this.config.formErrorHoldMs * 2) {
-          // Stuck in incorrect opening position
-          if (!armsAreHigh) this.setError('arms_too_low');
-          else if (!legsAreWide) this.setError('legs_too_narrow');
-        }
+        if (held(this.openSince, this.config.openHoldMs)) this.setPhase('open');
+        else if (held(this.closedSince, this.config.closedHoldMs)) {
+          // An incomplete attempt earns no rep. Resting arms do not prove an arms error.
+          this.setPhase('closed');
+        } else this.updateFormError(isClosedPosition ? null
+          : legsAreWide && !armsAreHigh ? 'arms_too_low'
+          : armsAreHigh && !legsAreWide ? 'legs_too_narrow' : null, timestampMs);
         break;
       }
 
       case 'open': {
-        if (!armsAreHigh || !legsAreWide) {
-          if (timeInState > this.config.transitionHoldMs) {
-            this.setPhase('closing', timestampMs);
-          }
-        }
+        this.transitionSince = !isOpenPosition ? this.transitionSince ?? timestampMs : null;
+        if (held(this.transitionSince, this.config.transitionHoldMs)) this.setPhase('closing');
         break;
       }
 
       case 'closing': {
-        if (isClosedPosition) {
-          if (timeInState > this.config.closedHoldMs) {
-            if (this.lastRepTimestampMs === 0 || timestampMs - this.lastRepTimestampMs > this.config.repCooldownMs) {
-              this.repCount++;
-              this.repJustCounted = true;
-              this.lastRepTimestampMs = timestampMs;
-              this.setPhase('closed', timestampMs);
-              this.setGoodForm();
-            } else {
-              this.setPhase('closed', timestampMs);
-            }
+        if (held(this.closedSince, this.config.closedHoldMs)) {
+          this.setPhase('closed');
+          if (timestampMs - this.lastRepTimestampMs >= this.config.repCooldownMs) {
+            this.repCount++;
+            this.repJustCounted = true;
+            this.lastRepTimestampMs = timestampMs;
+            this.setGoodForm();
           }
-        } else if (armsAreHigh && legsAreWide && timeInState > this.config.formErrorHoldMs) {
-           this.setPhase('open', timestampMs);
-        } else if (timeInState > this.config.formErrorHoldMs * 2 && !isClosedPosition) {
-           this.setError('incomplete_return');
-        }
+        } else if (held(this.openSince, this.config.openHoldMs)) this.setPhase('open');
+        else this.updateFormError(isClosedPosition || isOpenPosition ? null : 'incomplete_return', timestampMs);
         break;
       }
     }
   }
 
-  private setPhase(newPhase: JumpingJackPhase, timestampMs: number) {
+  private setPhase(newPhase: JumpingJackPhase) {
     this.phase = newPhase;
-    this.stateChangeTimestampMs = timestampMs;
+    this.transitionSince = null;
+    this.clearError();
+  }
+
+  private updateFormError(code: JumpingJackErrorCode | null, timestampMs: number) {
+    if (!code) { this.clearError(); return; }
+    const pending = this.pendingError;
+    // Compare against an anchor, not the preceding frame: slow, continuous movement also resets the hold.
+    const moved = pending && (
+      Math.abs(this.metrics.leftWristHeightRatio! - pending.anchor.leftWristHeightRatio!) > WRIST_MOVEMENT_DELTA ||
+      Math.abs(this.metrics.rightWristHeightRatio! - pending.anchor.rightWristHeightRatio!) > WRIST_MOVEMENT_DELTA ||
+      Math.abs(this.metrics.ankleWidthRatio! - pending.anchor.ankleWidthRatio!) > ANKLE_MOVEMENT_DELTA
+    );
+    if (!pending || pending.code !== code || moved) {
+      this.clearError();
+      this.pendingError = { code, since: timestampMs, anchor: { ...this.metrics } };
+    } else if (timestampMs - pending.since >= this.config.formErrorHoldMs) this.setError(code);
   }
 
   private setError(code: JumpingJackErrorCode) {
@@ -247,6 +287,7 @@ export class JumpingJackDetector {
   }
 
   private clearError() {
+    this.pendingError = null;
     this.formStatus = 'idle';
     this.errorCode = null;
     this.feedback = null;
