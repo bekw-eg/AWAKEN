@@ -20,8 +20,9 @@ describe('squat state machine', () => {
   it('counts frontal image motion even when world knee angles remain standing', () => {
     const recording = new SquatSequence();
     recording.calibrate();
-    recording.rep();
-    recording.rep();
+    // This image depth clears the webcam threshold (0.25), but not the old 0.4.
+    recording.rep({}, 110);
+    recording.rep({}, 110);
     const detector = new SquatDetector();
     const standingWorld = squatFrame(0).worldLandmarks;
     const results = recording.frames.map((frame) => detector.update({ ...frame, worldLandmarks: standingWorld }));
@@ -229,15 +230,32 @@ describe('squat state machine', () => {
     expect(s.result.errorCode).toBe('incomplete_lockout');
   });
 
-  it('requires both knees to reach depth', () => {
-    const s = new SquatSequence();
-    s.calibrate();
-    s.ramp(175, 80, 1000, { rightKnee: 135 });
-    s.hold({ knee: 80, rightKnee: 135 }, 500);
-    s.ramp(80, 175, 1000, { rightKnee: 135 });
-    s.hold({}, 500);
-    expect(s.result.repCount).toBe(0);
-    expect(s.result.errorCode).toBe('too_shallow');
+  it.each([
+    [110, 125, 1],
+    [125, 110, 1],
+    [115, 130, 0],
+  ])('uses average world depth for knees %i / %i (reps: %i)', (left, right, reps) => {
+    const recording = new SquatSequence();
+    recording.calibrate();
+    recording.ramp(175, left, 1000, { rightKnee: right });
+    recording.hold({ knee: left, rightKnee: right }, 500);
+    recording.ramp(left, 175, 1000, { rightKnee: right });
+    recording.hold({}, 500);
+    // Freeze image motion so frontal fallback cannot hide a world-depth regression.
+    const standingImage = squatFrame(0).landmarks;
+    const detector = new SquatDetector();
+    const results = recording.frames.map((frame) => detector.update({ ...frame, landmarks: standingImage }));
+    expect(detector.getResult().repCount).toBe(reps);
+    expect(detector.getResult().errorCode).toBe(reps ? null : 'too_shallow');
+    expect(results.filter((result) => result.repJustCounted)).toHaveLength(reps);
+    if (reps) {
+      const phases = results.map((result) => result.phase).filter((phase, i, all) => i === 0 || phase !== all[i - 1]);
+      expect(phases).toEqual(['standing', 'descending', 'bottom', 'ascending', 'standing']);
+      const bottom = results.find((result) => result.phase === 'bottom')!;
+      expect(Math.max(bottom.metrics.leftKneeAngle!, bottom.metrics.rightKneeAngle!)).toBeGreaterThan(DEFAULT_SQUAT_CONFIG.bottomKneeAngleMax);
+    } else {
+      expect(results.some((result) => result.phase === 'bottom')).toBe(false);
+    }
   });
 
   it('requires hip travel in addition to knee angles', () => {
@@ -255,7 +273,7 @@ describe('squat state machine', () => {
     s.ramp(175, 85, 1000);
     s.hold({ knee: 85 }, 400);
     const bottomImage = squatFrame(0, { knee: 85 }).landmarks;
-    for (let i = 0; i < 20; i++) s.frame({ knee: i % 2 ? 124 : 126 }, (frame) => { frame.landmarks = bottomImage; });
+    for (let i = 0; i < 20; i++) s.frame({ knee: DEFAULT_SQUAT_CONFIG.bottomExitKneeAngleMin + (i % 2 ? -1 : 1) }, (frame) => { frame.landmarks = bottomImage; });
     expect(s.result.phase).toBe('bottom');
     expect(s.result.repCount).toBe(0);
   });

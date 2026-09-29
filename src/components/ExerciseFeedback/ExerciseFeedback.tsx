@@ -27,6 +27,7 @@ export function ExerciseFeedback({ result, onReset }: Props) {
       <details className="exercise-debug">
         <summary>DEBUG METRICS</summary>
         <dl>
+          <div><dt>Tracking status</dt><dd>{trackingStatus}</dd></div>
           <div><dt>Left knee</dt><dd>{format(metrics.leftKneeAngle, '°')}</dd></div>
           <div><dt>Right knee</dt><dd>{format(metrics.rightKneeAngle, '°')}</dd></div>
           <div><dt>Avg knee</dt><dd>{format(metrics.avgKneeAngle, '°')}</dd></div>

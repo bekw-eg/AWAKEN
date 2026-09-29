@@ -15,15 +15,15 @@ export const DEFAULT_SQUAT_CONFIG: Readonly<SquatConfig> = {
   standingAngleToleranceDeg: 5,
   calibrationMaxHipDrift: 0.08,
   maxBodyScaleChange: 0.25,
-  standingKneeAngleMin: 160,
-  descendingKneeAngleMax: 145,
-  bottomKneeAngleMax: 110,
-  bottomExitKneeAngleMin: 125,
-  minAttemptHipDrop: 0.08,
-  minHipDepthDelta: 0.25,
-  frontalStartHipDrop: 0.12,
-  frontalDepthHipDrop: 0.4,
-  frontalThighCompression: 0.18,
+  standingKneeAngleMin: 155,
+  descendingKneeAngleMax: 150,
+  bottomKneeAngleMax: 120,
+  bottomExitKneeAngleMin: 130,
+  minAttemptHipDrop: 0.06,
+  minHipDepthDelta: 0.18,
+  frontalStartHipDrop: 0.08,
+  frontalDepthHipDrop: 0.25,
+  frontalThighCompression: 0.10,
   frontalDirectionDelta: 0.08,
   frontalLockoutCompression: 0.02,
   maxStandingHipDelta: 0.1,
@@ -31,9 +31,9 @@ export const DEFAULT_SQUAT_CONFIG: Readonly<SquatConfig> = {
   minKneeDistanceRatio: 0.65,
   directionAngleDelta: 10,
   progressAngleDelta: 3,
-  transitionHoldMs: 120,
-  bottomHoldMs: 60,
-  standingHoldMs: 120,
+  transitionHoldMs: 80,
+  bottomHoldMs: 40,
+  standingHoldMs: 100,
   formErrorHoldMs: 180,
   shallowFeedbackDelayMs: 1000,
   lockoutFeedbackDelayMs: 800,
@@ -245,7 +245,7 @@ export class SquatDetector {
       }
 
       if (this.phase === 'descending') {
-        const worldDeep = Math.max(m.leftKneeAngle, m.rightKneeAngle) <= this.config.bottomKneeAngleMax &&
+        const worldDeep = m.avgKneeAngle <= this.config.bottomKneeAngleMax &&
           hipDepthDelta >= this.config.minHipDepthDelta;
         const imageDeep = imageHipDepthDelta >= this.config.frontalDepthHipDrop &&
           Math.min(leftCompression, rightCompression) >= this.config.frontalThighCompression;
