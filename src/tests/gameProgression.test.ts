@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addXp, applyExerciseEvent, createGameState, gameReducer } from '../game/progression';
+import { addPlayerXp, applyExerciseEvent, createGameState, gameReducer } from '../game/progression';
 import type { ExerciseType, GameState } from '../game/types';
 
 function reps(state: GameState, exercise: ExerciseType, count: number) {
@@ -10,50 +10,59 @@ function reps(state: GameState, exercise: ExerciseType, count: number) {
 }
 
 describe('game progression', () => {
-  it('awards 10 XP and quest progress for each supported correct exercise without mutating input', () => {
-    for (const exercise of ['squat', 'jumping-jack', 'knee-raise'] as const) {
-      const initial = createGameState();
+  it('awards 15 XP for each supported correct exercise in workout mode', () => {
+    for (const exercise of ['squat', 'jumping-jack', 'push-up'] as const) {
+      let initial = createGameState();
+      initial.screen = 'workout';
       const next = reps(initial, exercise, 1);
-      expect(next.player.xp).toBe(10);
-      expect(next.dailyQuest.objectives.find((item) => item.exercise === exercise)?.current).toBe(1);
-      expect(initial).toEqual(createGameState());
+      expect(next.player.xp).toBe(15);
+      expect(next.exercises[exercise].xp).toBe(15);
     }
   });
 
-  it('ignores incorrect events, including their error codes', () => {
+  it('ignores incorrect events', () => {
     const state = createGameState();
+    state.screen = 'workout';
     expect(applyExerciseEvent(state, { exercise: 'squat', status: 'incorrect', errorCode: 'too_shallow', timestamp: 1 })).toBe(state);
   });
 
-  it('awards strength once at 10 squats and caps progress while later reps still earn XP', () => {
-    const ten = reps(createGameState(), 'squat', 10);
-    expect(ten.player).toMatchObject({ strength: 2, level: 2, xp: 0 });
-    expect(ten.dailyQuest.objectives[0]).toMatchObject({ current: 10, completed: true });
-    const eleven = reps(ten, 'squat', 1);
-    expect(eleven.player).toMatchObject({ strength: 2, xp: 10 });
-    expect(eleven.dailyQuest.objectives[0].current).toBe(10);
-    expect(eleven.dailyQuest.rewardClaimed).toBe(false);
+  it('levels up player properly and scales xpToNextLevel', () => {
+    const state = addPlayerXp(createGameState().player, 150);
+    expect(state.level).toBe(2);
+    expect(state.xp).toBe(50);
+    expect(state.xpToNextLevel).toBe(120);
+    expect(state.strength).toBe(11);
+    expect(state.maxHp).toBe(110);
+    expect(state.hp).toBe(110);
   });
 
-  it('carries overflow across multiple levels', () => {
-    expect(addXp({ ...createGameState().player, xp: 90 }, 250)).toMatchObject({ level: 4, xp: 40, xpToNextLevel: 100 });
+  it('damages enemy in battle mode', () => {
+    let state = createGameState();
+    state.screen = 'battle';
+    state.currentEnemy = { id: 'test', name: 'Test Enemy', hp: 50, maxHp: 50, attack: 5, defense: 2, isBoss: false };
+    
+    state = applyExerciseEvent(state, { exercise: 'squat', status: 'correct', timestamp: 1 });
+    
+    // Squat base damage is 10. Power is 10. 
+    // Damage = Math.floor(10 * (1 + 10 * 0.1) * (1 + 1 * 0.1)) = Math.floor(10 * 2 * 1.1) = 22
+    expect(state.currentEnemy?.hp).toBe(28); // 50 - 22
   });
 
-  it('awards each stat and the full quest reward only once', () => {
-    let state = reps(createGameState(), 'squat', 10);
-    state = reps(state, 'jumping-jack', 10);
-    state = reps(state, 'knee-raise', 9);
-    expect(state.player.gold).toBe(0);
-    expect(state.dailyQuest.rewardClaimed).toBe(false);
-    state = reps(state, 'knee-raise', 1);
-    expect(state.player).toEqual({ level: 5, xp: 50, xpToNextLevel: 100, strength: 2, endurance: 2, agility: 2, gold: 100 });
-    expect(state.dailyQuest.rewardClaimed).toBe(true);
-    for (const exercise of ['squat', 'jumping-jack', 'knee-raise'] as const) state = reps(state, exercise, 1);
-    expect(state.player).toMatchObject({ level: 5, xp: 80, gold: 100, strength: 2, endurance: 2, agility: 2 });
-    expect(state.dailyQuest.objectives.every((objective) => objective.current === 10)).toBe(true);
+  it('defeats enemy, grants xp, and transitions to main screen', () => {
+    let state = createGameState();
+    state.screen = 'battle';
+    state.currentEnemy = { id: 'test', name: 'Test Enemy', hp: 20, maxHp: 20, attack: 5, defense: 2, isBoss: false };
+    
+    state = applyExerciseEvent(state, { exercise: 'squat', status: 'correct', timestamp: 1 });
+    
+    expect(state.screen).toBe('main');
+    expect(state.currentEnemy).toBeNull();
+    expect(state.currentEnemyIndex).toBe(2);
+    expect(state.player.xp).toBe(50); // 50 XP for normal enemy defeat
   });
 
-  it('resets all progress and reward flags', () => {
-    expect(gameReducer(reps(createGameState(), 'squat', 11), { type: 'reset' })).toEqual(createGameState());
+  it('resets all progress on reset action', () => {
+    const state = reps(createGameState(), 'squat', 5);
+    expect(gameReducer(state, { type: 'reset' })).toEqual(createGameState());
   });
 });
