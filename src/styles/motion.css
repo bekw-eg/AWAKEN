@@ -1,0 +1,94 @@
+:root {
+  --motion-micro: 160ms;
+  --motion-normal: 260ms;
+  --motion-event: 480ms;
+  --motion-page: 320ms;
+  --motion-major: 800ms;
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --ease-impact: cubic-bezier(.2, .8, .3, 1.15);
+}
+button { transition: transform var(--motion-micro) var(--ease-out), background var(--motion-micro) ease-out, border-color var(--motion-micro) ease-out, opacity var(--motion-micro) ease-out; }
+button:active:not(:disabled) { transform: scale(.97); }
+button[aria-busy="true"] { cursor: progress; }
+.animated-number { display: inline-block; font-variant-numeric: tabular-nums; }
+.page-motion { animation: motion-enter var(--motion-normal) var(--ease-out) both; }
+.motion-text { display: inline-block; animation: motion-enter var(--motion-normal) var(--ease-out) both; }
+.exercise-phase .phase-reached { color: var(--accent); }
+.progress-track { position: relative; }
+.progress-track > span { position: absolute; inset: 0; width: 100%; transform-origin: left; transition: transform var(--motion-event) var(--ease-out); }
+.progress-track > .progress-trail { background: var(--warning); opacity: .65; transition-duration: 420ms; }
+.progress-track > .progress-fill { transition-duration: 300ms; }
+.rep-counter { position: relative; flex-wrap: wrap; }
+.rep-counter > span:nth-child(2) { font-size: 9px; color: var(--text-muted); letter-spacing: 1px; }
+.rep-counter .rep-series { flex-basis: 100%; }
+.rep-counter .rep-value { display: block; }
+.rep-confirmed { animation: rep-confirm var(--motion-event) var(--ease-impact); }
+.rep-counter > .rep-toast { position: absolute; top: 4px; right: 0; color: var(--accent); font-size: 10px; white-space: nowrap; animation: float-feedback 900ms var(--ease-out) both; pointer-events: none; }
+.rep-series { margin-top: 16px; font-size: 17px; color: var(--text-secondary); }
+.rep-series > small { display: block; font-size: 7px; letter-spacing: 1px; margin: 3px 0 7px; }
+.series-dots { display: flex; gap: 4px; justify-content: center; }
+.series-dots i { width: 12px; height: 3px; background: var(--border); }
+.series-dots .filled { background: var(--accent); }
+.series-complete { color: var(--accent); animation: rep-confirm var(--motion-event) var(--ease-impact); }
+.boot-overlay { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--background); }
+.boot-exit { pointer-events: none; animation: motion-exit var(--motion-normal) ease-out both; }
+.system-loading { display: grid; justify-items: center; gap: 16px; width: min(320px, 85%); text-align: center; }
+.system-loading .eyebrow { margin: 0; color: var(--text-secondary); }
+.loading-logo { font-size: clamp(32px, 6vw, 48px); letter-spacing: 6px; animation: logo-breathe 1800ms ease-in-out infinite alternate; }
+.loading-logo span { color: var(--accent); }
+.loading-rail, .system-loading .progress-track { width: 100%; height: 3px; }
+.loading-rail { overflow: hidden; background: var(--border); }
+.loading-rail span { display: block; width: 40%; height: 100%; background: var(--accent); animation: loading-sweep 1300ms ease-in-out infinite; }
+.system-loading small { font-size: 8px; letter-spacing: 1.3px; color: var(--text-muted); }
+.loading-percent { font-size: 12px; color: var(--accent); }
+.camera-loading { position: absolute; inset: 0; display: grid; place-items: center; background: rgb(8 9 11 / 90%); z-index: 2; }
+.camera-loading.camera-ready { pointer-events: none; animation: motion-exit 260ms 220ms ease-out both; }
+.compact-loading > .icon { color: var(--accent); width: 30px; height: 30px; }
+.detection-banner .pose-confirmation { color: var(--accent); animation: rep-confirm 480ms var(--ease-out); }
+.attack-card:not([aria-pressed="true"]) { opacity: .72; }
+.attack-card:hover:not(:disabled) { transform: translateY(-2px); opacity: 1; border-color: var(--accent); }
+.attack-card:active:not(:disabled) { transform: scale(.97); }
+.attack-card[aria-pressed="true"] .attack-card-top { animation: select-confirm 260ms var(--ease-impact); }
+.attack-card[data-state="completed"] .attack-card-footer { animation: rep-confirm 480ms var(--ease-impact); }
+.fighter-status { position: relative; }
+.fighter-low { border-color: color-mix(in srgb, var(--danger) 50%, var(--border)); }
+.fighter-status .damage-number { position: absolute; right: 18px; top: -10px; z-index: 3; margin: 0; padding: 2px 6px; border-radius: 4px; background: var(--surface); color: var(--danger); font-size: 21px; font-weight: 650; pointer-events: none; animation: float-feedback 800ms 80ms var(--ease-out) both; }
+.fighter-status .damage-strong { font-size: 26px; }
+.battle-status-copy.motion-text { display: flex; min-height: 48px; }
+.turn-label { display: block; color: var(--accent); font-size: 8px; letter-spacing: 1.4px; margin-bottom: 3px; }
+.enemy-strike .turn-label { color: var(--danger); }
+.battle-intro { position: fixed; inset: 0; z-index: 30; display: grid; place-content: center; justify-items: center; gap: 24px; text-align: center; background: rgb(8 9 11 / 96%); pointer-events: none; animation: intro-veil 1600ms ease-out both; }
+.battle-intro .eyebrow { color: var(--warning); margin: 0; }
+.battle-intro h2 { font-size: clamp(30px, 6vw, 58px); letter-spacing: 3px; margin: 0; animation: select-confirm 480ms var(--ease-out) both; }
+.intro-fighters { display: flex; gap: 24px; align-items: center; color: var(--text-secondary); animation: motion-enter 320ms 350ms both; }
+.intro-fighters small { color: var(--text-muted); }
+.intro-fight { color: var(--accent); font-size: 22px; letter-spacing: 6px; animation: select-confirm 300ms 850ms both; }
+.battle-intro.repeat-intro { animation-duration: 650ms; }
+.repeat-intro .intro-fighters, .repeat-intro .intro-fight { animation-delay: 0ms; }
+.terminal-battle .camera-system { opacity: .35; transition: opacity 480ms ease-out; pointer-events: none; }
+.battle-result.victory, .battle-result.defeat { animation: select-confirm 480ms var(--ease-out) both; }
+.result-reward, .result-recovery { animation: motion-enter 480ms 260ms both; }
+.result-level { animation: motion-enter 480ms 400ms both; }
+.result-actions { animation: motion-enter 320ms 650ms both; }
+.level-up-event { position: fixed; inset: 0; z-index: 35; display: grid; place-content: center; justify-items: center; gap: 18px; background: rgb(8 9 11 / 94%); pointer-events: none; animation: level-event 900ms ease-out both; }
+.level-up-event .icon { color: var(--accent); width: 40px; height: 40px; }
+.level-up-event strong { font-size: 40px; color: var(--accent); letter-spacing: 5px; }
+.level-up-event > span { font-size: 30px; display: flex; gap: 18px; align-items: center; }
+.journey-node.just-completed .path-marker { animation: rep-confirm 480ms var(--ease-impact) both; }
+.journey-node.just-completed::before { transform-origin: top; animation: path-fill 400ms 200ms ease-out both; }
+.journey-node.just-unlocked .path-marker, .journey-node.just-unlocked .node-content { animation: select-confirm 480ms 580ms var(--ease-out) both; }
+.quest-reward.complete { animation: select-confirm 480ms var(--ease-out); }
+@keyframes motion-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes motion-exit { to { opacity: 0; } }
+@keyframes rep-confirm { 0%, 100% { transform: scale(1); } 35% { transform: scale(1.16); color: var(--accent); } }
+@keyframes select-confirm { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
+@keyframes float-feedback { 0% { opacity: 0; transform: translateY(8px) scale(.85); } 18% { opacity: 1; transform: translateY(0) scale(1.08); } 55% { opacity: 1; } 100% { opacity: 0; transform: translateY(-32px) scale(1); } }
+@keyframes logo-breathe { to { opacity: .7; transform: translateY(-2px); } }
+@keyframes loading-sweep { from { transform: translateX(-100%); } to { transform: translateX(350%); } }
+@keyframes intro-veil { 0%, 72% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes level-event { 0% { opacity: 0; transform: scale(.98); } 20%, 75% { opacity: 1; transform: scale(1); } 100% { opacity: 0; } }
+@keyframes path-fill { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.reduce-motion .battle-intro, .reduce-motion .level-up-event { display: none; }
+.fighter-enemy .progress-fill { transition-delay: 80ms; }
+@media (max-width: 1000px) { .rep-counter > .rep-toast { top: 10px; right: auto; left: 0; font-size: 8px; } }
+@media (prefers-reduced-motion: reduce) { .battle-intro, .level-up-event { display: none; } .loading-rail span { transform: none; width: 100%; opacity: .6; } }

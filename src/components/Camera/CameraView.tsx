@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ExerciseEvent, ExerciseType } from '../../game/types';
 import { useSquatGameEvents } from '../../hooks/useSquatGameEvents';
 import { usePoseDetection } from '../../hooks/usePoseDetection';
@@ -10,6 +10,8 @@ import { ExerciseFeedback } from '../ExerciseFeedback/ExerciseFeedback';
 import { JumpingJackFeedback } from '../JumpingJackFeedback/JumpingJackFeedback';
 import { PoseOverlay } from '../PoseOverlay/PoseOverlay';
 import { Icon } from '../UI/Icon';
+import { LoadingScreen } from '../UI/LoadingScreen';
+import { emitMotionEvent, useStableText } from '../../motion/Motion';
 import './CameraView.css';
 
 export type CameraTelemetry = {
@@ -28,9 +30,10 @@ type Props = {
   hideSelector?: boolean;
   autoStart?: boolean;
   mirrored?: boolean;
+  suspended?: boolean;
 };
 
-export function CameraView({ onExerciseEvent, children, forcedExerciseType, onExerciseChange, hideSelector, autoStart = true, mirrored = true }: Props) {
+export function CameraView({ onExerciseEvent, children, forcedExerciseType, onExerciseChange, hideSelector, autoStart = true, mirrored = true, suspended = false }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [enabled, setEnabled] = useState(autoStart);
   const [restartKey, setRestartKey] = useState(0);
@@ -38,23 +41,38 @@ export function CameraView({ onExerciseEvent, children, forcedExerciseType, onEx
   const exerciseType = forcedExerciseType || internalExerciseType;
   const setExerciseType = onExerciseChange || setInternalExerciseType;
   const { landmarks, worldLandmarks, poseTimestampMs, videoSize, cameraStatus, engineStatus, isLoading, error, isPersonDetected } =
-    usePoseDetection(videoRef, enabled, restartKey);
+    usePoseDetection(videoRef, enabled && !suspended, restartKey);
 
   const active = cameraStatus === 'active' && engineStatus === 'active';
   const squat = useSquatExercise(landmarks, worldLandmarks, poseTimestampMs, active && exerciseType === 'squat');
   const jumpingJack = useJumpingJackExercise(landmarks, worldLandmarks, poseTimestampMs, active && exerciseType === 'jumping-jack');
   const pushUp = usePushUpExercise(landmarks, worldLandmarks, poseTimestampMs, active && exerciseType === 'push-up');
-  useSquatGameEvents(squat.repCount, squat.repJustCounted, onExerciseEvent);
-  useSquatGameEvents(jumpingJack.repCount, jumpingJack.repJustCounted, onExerciseEvent, 'jumping-jack');
-  useSquatGameEvents(pushUp.repCount, pushUp.repJustCounted, onExerciseEvent, 'push-up');
+  const confirmRep = useCallback((event: ExerciseEvent) => {
+    if (suspended) return;
+    emitMotionEvent({ type: 'rep-success', exercise: event.exercise, amount: 1 });
+    onExerciseEvent(event);
+  }, [onExerciseEvent, suspended]);
+  useSquatGameEvents(squat.repCount, squat.repJustCounted, confirmRep);
+  useSquatGameEvents(jumpingJack.repCount, jumpingJack.repJustCounted, confirmRep, 'jumping-jack');
+  useSquatGameEvents(pushUp.repCount, pushUp.repJustCounted, confirmRep, 'push-up');
   const result = exerciseType === 'squat' ? squat : exerciseType === 'jumping-jack' ? jumpingJack : pushUp;
   const stopped = cameraStatus === 'idle' && engineStatus === 'idle' && !error;
   const heading = error ? (error.startsWith('CAMERA ACCESS REQUIRED') ? 'CAMERA ACCESS REQUIRED' : 'CAMERA INTERRUPTED')
-    : engineStatus === 'loading' ? 'LOADING POSE ENGINE'
+    : engineStatus === 'loading' ? 'LOADING POSE MODEL'
     : cameraStatus === 'requesting' ? 'REQUESTING CAMERA ACCESS'
-    : cameraStatus === 'starting' ? 'WAITING FOR CAMERA'
+    : cameraStatus === 'starting' ? 'INITIALIZING CAMERA'
     : isPersonDetected ? 'POSE DETECTED'
-    : active ? 'STEP INTO THE FRAME' : 'CAMERA OFFLINE';
+    : active ? 'SEARCHING FOR USER' : 'CAMERA OFFLINE';
+  const stableHeading = useStableText(heading, 180);
+  const [showLoading, setShowLoading] = useState(isLoading);
+  useEffect(() => {
+    if (isLoading) { setShowLoading(true); return; }
+    if (!active) { setShowLoading(false); return; }
+    const timer = setTimeout(() => setShowLoading(false), 480);
+    return () => clearTimeout(timer);
+  }, [isLoading, active]);
+  // Percentages represent three completed setup stages, not download bytes or elapsed time.
+  const initializationProgress = active ? 100 : engineStatus === 'loading' ? 67 : cameraStatus === 'starting' ? 33 : 0;
   const restart = () => { setEnabled(true); setRestartKey((key) => key + 1); };
   const telemetry: CameraTelemetry = { active, isPersonDetected, repCount: result.repCount, phase: result.phase, trackingStatus: result.trackingStatus, formStatus: result.formStatus };
 
@@ -74,24 +92,23 @@ export function CameraView({ onExerciseEvent, children, forcedExerciseType, onEx
               <PoseOverlay landmarks={landmarks} width={videoSize.width} height={videoSize.height} />
             </div>
             <div className="frame-corners" aria-hidden="true" />
-            {(isLoading || error || stopped) && <div className="stage-message">
-              <Icon name={error ? 'CameraOff' : isLoading ? 'Loader' : 'Camera'} />
-              <h3>{error ? 'Let’s reconnect.' : isLoading ? 'Connecting your camera' : 'Ready when you are.'}</h3>
-              <p>{error ? 'Check the camera connection below.' : cameraStatus === 'requesting' ? 'Allow camera access in your browser.'
-                : engineStatus === 'loading' ? 'Preparing body tracking. Hold still for a moment.'
-                : cameraStatus === 'starting' ? 'Waiting for the video signal.' : 'Start your camera. Step into the frame.'}</p>
+            {showLoading && <div className={`camera-loading${active ? ' camera-ready' : ''}`}><LoadingScreen compact ready={active} progress={initializationProgress} status={active ? 'READY' : heading} /></div>}
+            {(error || stopped) && <div className="stage-message">
+              <Icon name={error ? 'CameraOff' : 'Camera'} />
+              <h3>{error ? 'Let’s reconnect.' : 'Ready when you are.'}</h3>
+              <p>{error ? 'Check the camera connection below.' : 'Start your camera. Step into the frame.'}</p>
             </div>}
           </div>
           <div className={`detection-banner${error ? ' error' : ''}`} role="status">
-            <Icon name={active && isPersonDetected ? 'CheckCircle' : error ? 'Info' : 'Activity'} /><span>{heading}</span>
+            <Icon name={active && isPersonDetected ? 'Check' : error ? 'Info' : 'Activity'} /><span key={stableHeading} className={`motion-text${stableHeading === 'POSE DETECTED' ? ' pose-confirmation' : ''}`}>{stableHeading}</span>
             <small>{cameraStatus === 'active' ? `${videoSize.width} × ${videoSize.height}` : 'VISION LINK'}</small>
           </div>
         </div>
         {error && <p className="error-detail" role="alert">{error}</p>}
         <div className="system-footer">
           <span><Icon name="Shield" />Camera stays on your device</span>
-          <button className="text-button" type="button" onClick={error || stopped ? restart : () => setEnabled(false)}>
-            <Icon name={error ? 'RotateCcw' : stopped ? 'Camera' : 'CameraOff'} />{error ? 'Retry connection' : stopped ? 'Start camera' : 'Stop camera'}
+          <button className="text-button" type="button" disabled={isLoading || suspended} aria-busy={isLoading} onClick={error || stopped ? restart : () => setEnabled(false)}>
+            <Icon name={error ? 'RotateCcw' : stopped ? 'Camera' : 'CameraOff'} />{isLoading ? 'Initializing camera…' : error ? 'Retry connection' : stopped ? 'Start camera' : 'Stop camera'}
           </button>
         </div>
       </div>

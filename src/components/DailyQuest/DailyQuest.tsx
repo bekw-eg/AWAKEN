@@ -1,3 +1,4 @@
+import { AnimatedNumber } from '../UI/AnimatedNumber';
 import { EXERCISES, QUEST_GOLD, QUEST_XP } from '../../game/progression';
 import type { GameState } from '../../game/types';
 import { Icon } from '../UI/Icon';
@@ -10,7 +11,7 @@ export function DailyQuest({ quest }: { quest: GameState['dailyQuest'] }) {
     {quest.objectives.map((objective) => {
       const definition = EXERCISES.find(({ exercise }) => exercise === objective.exercise)!;
       return <div className="quest-objective" key={objective.exercise}>
-        <div className="quest-label"><span>{objective.completed && <Icon name="Check" />}{definition.label}</span><span>{objective.current}<small> / {objective.target}</small></span></div>
+        <div className="quest-label"><span>{objective.completed && <Icon name="Check" />}{definition.label}</span><span><AnimatedNumber value={objective.current} /><small> / {objective.target}</small></span></div>
         <ProgressBar value={objective.current} max={objective.target} label={`${definition.label} objective`} tone={objective.completed ? 'accent' : 'muted'} />
         <p className="game-hint">+1 {definition.shortStat}{objective.completed ? ' earned' : ' on completion'}</p>
       </div>;

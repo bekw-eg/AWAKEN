@@ -1,3 +1,4 @@
+import { AnimatedNumber } from '../UI/AnimatedNumber';
 import type { ReactNode } from 'react';
 import type { PlayerState } from '../../game/types';
 import { Icon, type IconName } from '../UI/Icon';
@@ -31,14 +32,14 @@ export function AppShell({ page, battle, player, onNavigate, children, reducedMo
       </nav>
       <div className="sidebar-bottom">
         <button className="nav-item" aria-current={page === 'settings' ? 'page' : undefined} onClick={() => onNavigate('settings')}><Icon name="Settings" /><span>Settings</span></button>
-        <div className="sidebar-player"><div className="player-monogram"><Icon name="User" /></div><div><strong>Player</strong><span>LEVEL {String(player.level).padStart(2, '0')}</span></div></div>
+        <div className="sidebar-player"><div className="player-monogram"><Icon name="User" /></div><div><strong>Player</strong><span>LEVEL <AnimatedNumber value={player.level} pad={2} /></span></div></div>
         <ProgressBar value={player.xp} max={player.xpToNextLevel} label="Player experience" />
-        <p className="sidebar-xp">{player.xp} / {player.xpToNextLevel} XP</p>
+        <p className="sidebar-xp"><AnimatedNumber value={player.xp} /> / {player.xpToNextLevel} XP</p>
       </div>
     </aside>
     <div className="app-body">
       <header className="app-topbar"><div className="breadcrumb"><span>AWAKEN</span><Icon name="ChevronRight" /><span>{battle ? 'Battle arena' : page}</span></div>
-        <div className="topbar-vitals"><span><Icon name="Heart" />{player.hp}<small>HP</small></span><span className="level-tag">LVL {String(player.level).padStart(2, '0')}</span></div>
+        <div className="topbar-vitals"><span><Icon name="Heart" /><AnimatedNumber value={player.hp} /><small>HP</small></span><span className="level-tag">LVL <AnimatedNumber value={player.level} pad={2} /></span></div>
       </header>
       <main id="content" className={`app-content${battle ? ' arena-content' : ''}`} tabIndex={-1}>{children}</main>
       <footer className="app-footer"><span>AWAKEN / FITNESS RPG</span><span><Icon name="Shield" /> Your movement. Your progress.</span></footer>

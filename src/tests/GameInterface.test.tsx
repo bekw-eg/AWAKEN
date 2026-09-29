@@ -41,6 +41,15 @@ it.each([
   expect(screen.queryByText('ATTACK SUCCESSFUL')).toBeNull();
 });
 
+it('clears the prior hit confirmation when a different attack is selected', () => {
+  start();
+  rep();
+  fireEvent.click(screen.getByRole('button', { name: 'Push-up: Strong attack' }));
+  expect(screen.getByRole('button', { name: 'Push-up: Strong attack' }).getAttribute('data-state')).toBe('selected');
+  expect(screen.queryByText('ATTACK SUCCESSFUL')).toBeNull();
+  expect(hp('Enemy 1')).toBe(38);
+});
+
 it('retains the enemy cadence, shows incoming damage, and stops timers after leaving', () => {
   start();
   act(() => vi.advanceTimersByTime(4999));
@@ -55,6 +64,7 @@ it('retains the enemy cadence, shows incoming damage, and stops timers after lea
   act(() => vi.advanceTimersByTime(1));
   expect(hp('Player')).toBe(92);
   fireEvent.click(screen.getAllByRole('button', { name: 'Journey' }).at(-1)!);
+  act(() => vi.advanceTimersByTime(500)); // Finish the topbar's last HP tween.
   expect(vi.getTimerCount()).toBe(0);
   act(() => vi.advanceTimersByTime(5000));
   expect(screen.queryByRole('heading', { name: 'Defeated.' })).toBeNull();
@@ -64,10 +74,13 @@ it('retains the enemy cadence, shows incoming damage, and stops timers after lea
 it('presents defeat and retry without granting progress or changing restored health', () => {
   start();
   act(() => vi.advanceTimersByTime(125000));
+  expect(hp('Player')).toBe(0);
+  expect(screen.queryByRole('heading', { name: 'Defeated.' })).toBeNull();
+  act(() => vi.advanceTimersByTime(760));
   expect(screen.getByRole('heading', { name: 'Defeated.' })).toBeTruthy();
   expect(screen.getByText('Health restored to 100 HP')).toBeTruthy();
   // jsdom schedules a selection-change task when the result heading receives focus.
-  act(() => vi.advanceTimersByTime(0));
+  act(() => vi.advanceTimersByTime(500)); // Restored HP is also animated in the topbar.
   expect(vi.getTimerCount()).toBe(0);
   fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
   expect(hp('Player')).toBe(100);
@@ -82,10 +95,14 @@ it('completes all nine enemies and the boss, shows rewards, and returns to the e
   for (let encounter = 1; encounter <= 10; encounter++) {
     fireEvent.click(screen.getByRole('button', { name: 'Enter battle' }));
     fireEvent.click(screen.getByRole('button', { name: 'Push-up: Strong attack' }));
-    for (let count = 0; count < 30 && screen.queryByRole('button', { name: 'Complete correct rep' }); count++) rep();
+    for (let count = 0; count < 30 && !document.querySelector('.terminal-battle'); count++) rep();
+    expect(hp(encounter === 10 ? 'BOSS 1' : 'Enemy ' + encounter)).toBe(0);
+    expect(screen.queryByRole('heading', { name: encounter === 10 ? 'Boss defeated.' : 'Victory.' })).toBeNull();
+    act(() => vi.advanceTimersByTime(760));
     expect(screen.getByRole('heading', { name: encounter === 10 ? 'Boss defeated.' : 'Victory.' })).toBeTruthy();
-    expect(screen.getByText(encounter === 10 ? '+200' : '+50')).toBeTruthy();
-    act(() => vi.advanceTimersByTime(0));
+    act(() => vi.advanceTimersByTime(1800));
+    expect(document.querySelector('.result-reward strong')?.textContent).toBe(encounter === 10 ? '+200' : '+50');
+    act(() => vi.advanceTimersByTime(40)); // Paint the new level's progress track.
     expect(vi.getTimerCount()).toBe(0);
     fireEvent.click(screen.getByRole('button', { name: 'Continue journey' }));
     const map = screen.getByRole('list', { name: 'Campaign encounters' });

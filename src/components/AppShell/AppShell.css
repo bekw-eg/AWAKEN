@@ -15,7 +15,7 @@
 .sidebar-player { border-top: 1px solid var(--border); margin-top: 24px; padding-top: 24px; display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
 .player-monogram { width: 34px; height: 34px; display: grid; place-items: center; background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .sidebar-player strong { font-size: 12px; font-weight: 500; display: block; }
-.sidebar-player span { font-size: 9px; letter-spacing: 1px; color: var(--text-muted); display: block; margin-top: 2px; }
+.sidebar-player > div > span { font-size: 9px; letter-spacing: 1px; color: var(--text-muted); display: block; margin-top: 2px; }
 .sidebar-xp { font-size: 9px; color: var(--text-muted); margin: 7px 0 0; font-variant-numeric: tabular-nums; }
 .app-body { margin-left: 204px; min-height: 100dvh; display: flex; flex-direction: column; }
 .app-topbar { height: 72px; display: flex; align-items: center; justify-content: space-between; padding: 0 40px; border-bottom: 1px solid var(--border); gap: 12px; }
