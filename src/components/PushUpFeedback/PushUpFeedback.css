@@ -1,0 +1,10 @@
+.push-up-setup {
+  margin: 1rem 0;
+  padding: 1rem;
+  border-left: 2px solid #65e5ff;
+  background: rgba(101, 229, 255, 0.05);
+  line-height: 1.6;
+}
+.push-up-setup p { margin: 0.5rem 0 0; }
+.exercise-mode-selector { display: flex; gap: 0.75rem; flex-wrap: wrap; margin: 1rem 0; }
+.exercise-mode-selector button[aria-pressed="true"] { border-color: #65e5ff; color: #65e5ff; }

@@ -3,6 +3,8 @@ import type { ExerciseEvent } from '../../game/types';
 import { useSquatGameEvents } from '../../hooks/useSquatGameEvents';
 import { usePoseDetection } from '../../hooks/usePoseDetection';
 import { useSquatExercise } from '../../hooks/useSquatExercise';
+import { usePushUpExercise } from '../../hooks/usePushUpExercise';
+import { PushUpFeedback } from '../PushUpFeedback/PushUpFeedback';
 import { ExerciseFeedback } from '../ExerciseFeedback/ExerciseFeedback';
 import { PoseOverlay } from '../PoseOverlay/PoseOverlay';
 import './CameraView.css';
@@ -14,11 +16,13 @@ export function CameraView({ onExerciseEvent, children }: {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [enabled, setEnabled] = useState(true);
   const [restartKey, setRestartKey] = useState(0);
+  const [mode, setMode] = useState<'squat' | 'push-up'>('squat');
   const { landmarks, worldLandmarks, poseTimestampMs, videoSize, cameraStatus, engineStatus, isLoading, error, isPersonDetected } =
     usePoseDetection(videoRef, enabled, restartKey);
 
   const active = cameraStatus === 'active' && engineStatus === 'active';
-  const squat = useSquatExercise(landmarks, worldLandmarks, poseTimestampMs, active);
+  const squat = useSquatExercise(landmarks, worldLandmarks, poseTimestampMs, active && mode === 'squat');
+  const pushUp = usePushUpExercise(landmarks, worldLandmarks, poseTimestampMs, active && mode === 'push-up');
   useSquatGameEvents(squat.repCount, squat.repJustCounted, onExerciseEvent);
   const stopped = cameraStatus === 'idle' && engineStatus === 'idle' && !error;
   const heading = error ? (error.startsWith('CAMERA ACCESS REQUIRED') ? 'CAMERA ACCESS REQUIRED' : 'SYSTEM INTERRUPTED')
@@ -39,10 +43,14 @@ export function CameraView({ onExerciseEvent, children }: {
       <section className="camera-system" id="main" aria-labelledby="page-title">
         <div className="section-heading">
           <div><p className="eyebrow">REAL-WORLD INPUT · ONLINE POTENTIAL</p><h1 id="page-title">CAMERA <span>SYSTEM</span></h1></div>
-          <span className="stage-tag">PHASE 02 / SQUAT TRAINING</span>
+          <span className="stage-tag">PHASE 02 / {mode === 'squat' ? 'SQUAT TRAINING' : 'PUSH-UP MODE'}</span>
         </div>
         <p className="intro">Your body is the controller. Step into the frame.</p>
         {children}
+        <div className="exercise-mode-selector" role="group" aria-label="Exercise mode">
+          <button type="button" aria-pressed={mode === 'squat'} onClick={() => setMode('squat')}>SQUAT</button>
+          <button type="button" aria-pressed={mode === 'push-up'} onClick={() => setMode('push-up')}>PUSH-UP</button>
+        </div>
 
         <div className="camera-panel">
           <div className="panel-bar"><span><i className={cameraStatus === 'active' ? 'dot active' : 'dot'} /> LIVE CAMERA</span><span>MIRRORED VIEW</span></div>
@@ -77,8 +85,8 @@ export function CameraView({ onExerciseEvent, children }: {
             {error ? 'RETRY CONNECTION' : stopped ? 'START CAMERA' : 'STOP CAMERA'} <span aria-hidden="true">↗</span>
           </button>
         </div>
-        <ExerciseFeedback result={squat} onReset={squat.reset} />
-        <aside className="setup-note"><span aria-hidden="true">⌖</span><p><strong>Keep your full body in view.</strong> Face the camera, stand upright for one second, and use good lighting.</p></aside>
+        {mode === 'push-up' ? <PushUpFeedback result={pushUp} onReset={pushUp.reset} /> : <ExerciseFeedback result={squat} onReset={squat.reset} />}
+        <aside className="setup-note"><span aria-hidden="true">⌖</span><p><strong>Keep your full body in view.</strong> {mode === 'push-up' ? 'Use a side view, show your wrists and ankles, and hold a straight plank.' : 'Face the camera, stand upright for one second, and use good lighting.'}</p></aside>
         <footer className="privacy"><span>LOCAL PROCESSING</span> Camera frames stay on this device. No video is uploaded or recorded.</footer>
       </section>
     </main>
