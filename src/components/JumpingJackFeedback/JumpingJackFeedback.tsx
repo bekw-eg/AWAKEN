@@ -4,15 +4,19 @@ import './JumpingJackFeedback.css';
 
 export type JumpingJackFeedbackProps = {
   result: JumpingJackDetectionResult;
+  onReset: () => void;
 };
 
-export const JumpingJackFeedback: React.FC<JumpingJackFeedbackProps> = ({ result }) => {
+export const JumpingJackFeedback: React.FC<JumpingJackFeedbackProps> = ({ result, onReset }) => {
   const { phase, repCount, formStatus, feedback, trackingStatus, metrics } = result;
 
   return (
     <div className="jumping-jack-feedback">
       <div className="feedback-header">
-        <h2>JUMPING JACK</h2>
+        <div>
+          <h2>JUMPING JACK</h2>
+          <button type="button" onClick={onReset} style={{ fontSize: '0.7rem', padding: '2px 6px', marginTop: '4px', cursor: 'pointer' }}>RESET</button>
+        </div>
         <div className="reps">REPS {repCount}</div>
       </div>
 

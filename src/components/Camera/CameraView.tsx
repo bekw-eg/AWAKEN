@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react';
 import { usePoseDetection } from '../../hooks/usePoseDetection';
 import { useSquatExercise } from '../../hooks/useSquatExercise';
+import { useJumpingJackExercise } from '../../hooks/useJumpingJackExercise';
 import { ExerciseFeedback } from '../ExerciseFeedback/ExerciseFeedback';
+import { JumpingJackFeedback } from '../JumpingJackFeedback/JumpingJackFeedback';
 import { PoseOverlay } from '../PoseOverlay/PoseOverlay';
 import './CameraView.css';
 
@@ -9,11 +11,14 @@ export function CameraView() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [enabled, setEnabled] = useState(true);
   const [restartKey, setRestartKey] = useState(0);
+  const [exerciseType, setExerciseType] = useState<'squat' | 'jumping-jack'>('squat');
+  
   const { landmarks, worldLandmarks, poseTimestampMs, videoSize, cameraStatus, engineStatus, isLoading, error, isPersonDetected } =
     usePoseDetection(videoRef, enabled, restartKey);
 
   const active = cameraStatus === 'active' && engineStatus === 'active';
-  const squat = useSquatExercise(landmarks, worldLandmarks, poseTimestampMs, active);
+  const squat = useSquatExercise(landmarks, worldLandmarks, poseTimestampMs, active && exerciseType === 'squat');
+  const jumpingJack = useJumpingJackExercise(landmarks, worldLandmarks, poseTimestampMs, active && exerciseType === 'jumping-jack');
   const stopped = cameraStatus === 'idle' && engineStatus === 'idle' && !error;
   const heading = error ? (error.startsWith('CAMERA ACCESS REQUIRED') ? 'CAMERA ACCESS REQUIRED' : 'SYSTEM INTERRUPTED')
     : engineStatus === 'loading' ? 'INITIALIZING POSE ENGINE…'
@@ -33,7 +38,15 @@ export function CameraView() {
       <section className="camera-system" id="main" aria-labelledby="page-title">
         <div className="section-heading">
           <div><p className="eyebrow">REAL-WORLD INPUT · ONLINE POTENTIAL</p><h1 id="page-title">CAMERA <span>SYSTEM</span></h1></div>
-          <span className="stage-tag">PHASE 02 / SQUAT TRAINING</span>
+          <select 
+            className="stage-tag" 
+            value={exerciseType} 
+            onChange={(e) => setExerciseType(e.target.value as 'squat' | 'jumping-jack')}
+            style={{ background: 'transparent', color: '#38bdf8', border: '1px solid currentColor', cursor: 'pointer', padding: '4px 8px', outline: 'none' }}
+          >
+            <option value="squat" style={{color: 'black'}}>PHASE 01 / SQUAT</option>
+            <option value="jumping-jack" style={{color: 'black'}}>PHASE 02 / JUMPING JACK</option>
+          </select>
         </div>
         <p className="intro">Your body is the controller. Step into the frame.</p>
 
@@ -70,7 +83,11 @@ export function CameraView() {
             {error ? 'RETRY CONNECTION' : stopped ? 'START CAMERA' : 'STOP CAMERA'} <span aria-hidden="true">↗</span>
           </button>
         </div>
-        <ExerciseFeedback result={squat} onReset={squat.reset} />
+        {exerciseType === 'squat' ? (
+          <ExerciseFeedback result={squat} onReset={squat.reset} />
+        ) : (
+          <JumpingJackFeedback result={jumpingJack} onReset={jumpingJack.reset} />
+        )}
         <aside className="setup-note"><span aria-hidden="true">⌖</span><p><strong>Keep your full body in view.</strong> Face the camera, stand upright for one second, and use good lighting.</p></aside>
         <footer className="privacy"><span>LOCAL PROCESSING</span> Camera frames stay on this device. No video is uploaded or recorded.</footer>
       </section>
