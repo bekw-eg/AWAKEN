@@ -29,6 +29,7 @@ export function PushUpFeedback({ result, onReset }: { result: PushUpDetectionRes
         <dl>
           <div><dt>Elbow angle</dt><dd>{format(result.metrics.elbowAngle)}°</dd></div>
           <div><dt>Body angle</dt><dd>{format(result.metrics.bodyAngle)}°</dd></div>
+          <div><dt>Knee angle</dt><dd>{format(result.metrics.kneeAngle)}°</dd></div>
           <div><dt>Hip offset</dt><dd>{format(result.metrics.hipOffsetRatio, 2)}</dd></div>
         </dl>
       </details>

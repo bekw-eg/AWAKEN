@@ -28,7 +28,8 @@ export function CameraView({ onExerciseEvent, children }: {
   const active = cameraStatus === 'active' && engineStatus === 'active';
   const squat = useSquatExercise(landmarks, worldLandmarks, poseTimestampMs, active && exerciseType === 'squat');
   const jumpingJack = useJumpingJackExercise(landmarks, worldLandmarks, poseTimestampMs, active && exerciseType === 'jumping-jack');
-  const pushUp = usePushUpExercise(landmarks, worldLandmarks, poseTimestampMs, active && exerciseType === 'push-up');
+  const pushUp = usePushUpExercise(landmarks, worldLandmarks, poseTimestampMs, active && exerciseType === 'push-up',
+    undefined, videoSize.width / videoSize.height);
   useSquatGameEvents(squat.repCount, squat.repJustCounted, onExerciseEvent);
   const stopped = cameraStatus === 'idle' && engineStatus === 'idle' && !error;
   const heading = error ? (error.startsWith('CAMERA ACCESS REQUIRED') ? 'CAMERA ACCESS REQUIRED' : 'SYSTEM INTERRUPTED')

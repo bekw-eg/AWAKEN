@@ -121,12 +121,81 @@ describe('PushUpDetector', () => {
     s.hold(); s.rep(); expect(s.result.trackingStatus).toBe('wrong_angle');
     expect(s.result.repCount).toBe(0);
     const frame = pushUpFrame(100);
-    frame.worldLandmarks = frame.worldLandmarks!.map(p => ({ ...p, x: -p.y, y: p.x }));
+    frame.landmarks = frame.landmarks!.map(p => ({ ...p, x: 0.5 - 0.8 * (p.y - 0.5) / frame.imageAspectRatio!, y: 0.5 + 0.8 * (p.x - 0.5) * frame.imageAspectRatio! }));
     expect(new PushUpDetector().update(frame).trackingStatus).toBe('wrong_angle');
   });
   it('requires held transitions instead of reacting to a single noisy elbow frame', () => {
     const s = new PushUpSequence(); s.hold(); s.frame({ elbow: 100 }); s.hold();
     expect(s.result.phase).toBe('top'); expect(s.result.repCount).toBe(0);
     s.rep(); expect(s.result.repCount).toBe(1);
+  });
+  it.each([16 / 9, 4 / 3, 9 / 16])('measures the same visible motion at aspect ratio %s despite incorrect model depth', aspect => {
+    const s = new PushUpSequence(); s.hold(); s.rep();
+    const detector = new PushUpDetector();
+    const results = s.frames.map(f => detector.update({ ...f, imageAspectRatio: aspect,
+      // Reproject the same shape into each camera format, scaled to fit portrait too.
+      landmarks: f.landmarks!.map(p => ({ ...p,
+        x: 0.5 + (p.x - 0.5) * f.imageAspectRatio! / aspect * 0.45,
+        y: 0.5 + (p.y - 0.5) * 0.45, z: 12 })),
+      worldLandmarks: f.worldLandmarks!.map((p, index) => ({ ...p,
+        x: p.x * 0.7, z: index % 2 === 0 ? 1.5 : -1.5, visibility: 0.1 })),
+    }));
+    expect(detector.getResult().repCount).toBe(1);
+    expect(detector.getResult().metrics.kneeAngle).toBeCloseTo(180);
+    expect(detector.getResult().metrics.elbowAngle).toBeCloseTo(s.result.metrics.elbowAngle!, 5);
+    expect(results.filter(r => r.repJustCounted)).toHaveLength(1);
+  });
+  it('uses visible geometry when world landmarks are unavailable', () => {
+    const s = new PushUpSequence(); s.hold(); s.rep();
+    const detector = new PushUpDetector();
+    s.frames.forEach(f => detector.update({ ...f, worldLandmarks: null }));
+    expect(detector.getResult().repCount).toBe(1);
+  });
+  it('does not let a straight world skeleton hide visibly bent legs', () => {
+    const s = new PushUpSequence(); s.hold(); s.rep();
+    const detector = new PushUpDetector();
+    s.frames.forEach(f => detector.update({ ...f, landmarks: f.landmarks!.map((p, i) =>
+      i === 25 || i === 26 ? { ...p, y: p.y + 0.2 } : p) }));
+    expect(detector.getResult().repCount).toBe(0);
+    expect(detector.getResult().errorCode).toBe('body_alignment');
+  });
+  it('tolerates moderately occluded knees and ankles without switching the arm side', () => {
+    const s = new PushUpSequence(); s.hold(); s.rep();
+    const detector = new PushUpDetector();
+    const results = s.frames.map(f => detector.update({ ...f, landmarks: f.landmarks!.map((p, i) =>
+      [25, 26, 27, 28].includes(i) ? { ...p, visibility: 0.5 } : p) }));
+    expect(detector.getResult().repCount).toBe(1);
+    expect(results.every(r => r.activeSide === 'left')).toBe(true);
+  });
+  it.each(['hidden', 'outside', 'missing'] as const)('still cancels a rep when the active leg is %s', reason => {
+    const s = new PushUpSequence(); s.hold(); s.rep(); s.ramp(175, 85); s.hold(85);
+    s.frame({ elbow: 85 }, f => {
+      f.landmarks = f.landmarks!.map((p, i) => i === 27 ? {
+        ...p, visibility: reason === 'hidden' ? 0.1 : 1,
+        x: reason === 'outside' ? 1.1 : reason === 'missing' ? NaN : p.x,
+      } : p);
+    });
+    expect(s.result.trackingStatus).toBe('unreliable');
+    s.ramp(85, 175); s.hold(); expect(s.result.repCount).toBe(1);
+  });
+  it('recognizes a short confirmed bottom without an artificial pause for smoothing', () => {
+    const s = new PushUpSequence(); s.hold(); s.ramp(175, 110, 600); s.hold(110, 200);
+    s.hold(95, 150); s.ramp(95, 175, 150); s.hold();
+    expect(s.result.repCount).toBe(1);
+  });
+  it('does not treat a single deep outlier in a shallow rep as confirmed depth', () => {
+    const s = new PushUpSequence(); s.hold(); s.ramp(175, 125);
+    s.frame({ elbow: 85 }); s.hold(125, 200); s.ramp(125, 175); s.hold();
+    expect(s.result.repCount).toBe(0);
+    expect(s.result.errorCode).toBe('too_shallow');
+  });
+  it('cancels an attempt if camera aspect ratio changes', () => {
+    const s = new PushUpSequence(); s.hold(); s.ramp(175, 85); s.hold(85);
+    s.frame({ elbow: 85 }, f => { f.imageAspectRatio = 16 / 9; });
+    s.ramp(85, 175); s.hold();
+    expect(s.result.repCount).toBe(0);
+  });
+  it.each([0, -1, NaN, Infinity])('rejects invalid image aspect %s', imageAspectRatio => {
+    expect(new PushUpDetector().update({ ...pushUpFrame(100), imageAspectRatio }).trackingStatus).toBe('unreliable');
   });
 });

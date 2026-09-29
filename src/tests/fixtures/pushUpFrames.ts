@@ -22,7 +22,7 @@ export function pushUpFrame(timestampMs: number, options: PushUpPose = {}): Push
   const r = yaw * Math.PI / 180;
   const worldLandmarks = world.map(p => ({ ...p, x: p.x * Math.cos(r) + p.z * Math.sin(r), z: -p.x * Math.sin(r) + p.z * Math.cos(r) }));
   const landmarks = worldLandmarks.map(p => ({ ...p, x: 0.5 + p.x * 0.55, y: 0.35 + p.y * 0.8 }));
-  return { landmarks, worldLandmarks, timestampMs };
+  return { landmarks, worldLandmarks, timestampMs, imageAspectRatio: 0.8 / 0.55 };
 }
 export class PushUpSequence {
   time = 0;

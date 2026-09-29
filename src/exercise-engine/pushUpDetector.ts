@@ -4,7 +4,7 @@ import type { PushUpConfig, PushUpDetectionResult, PushUpErrorCode, PushUpFrame,
 
 /** Demo values: tune with side-view webcam recordings, not medical standards. */
 export const DEFAULT_PUSH_UP_CONFIG: Readonly<PushUpConfig> = {
-  minVisibility: 0.6, minPresence: 0.6, frameMargin: 0.01,
+  minVisibility: 0.6, minLegVisibility: 0.45, minPresence: 0.6, frameMargin: 0.01,
   sideSwitchScoreMargin: 0.1, maxSidePairToTorsoRatio: 0.55,
   maxBodyVerticalRatio: 0.6, minKneeAngle: 155,
   topElbowAngleMin: 160, bottomElbowAngleMax: 100,
@@ -36,6 +36,7 @@ export class PushUpDetector {
   private lastTimestamp: number | null = null;
   private lastFinishedAt = -Infinity;
   private smoothAngle: number | null = null;
+  private imageAspectRatio: number | null = null;
   private holds = new Map<string, number>();
   private outcome: { at: number; error: PushUpErrorCode | null } | null = null;
   private result: PushUpDetectionResult;
@@ -64,6 +65,9 @@ export class PushUpDetector {
     const dt = this.lastTimestamp === null ? 0 : now - this.lastTimestamp;
     this.lastTimestamp = now;
     if (dt > this.config.maxFrameGapMs) this.clearTracking();
+    const aspect = frame.imageAspectRatio ?? 1;
+    if (this.imageAspectRatio !== null && Math.abs(aspect - this.imageAspectRatio) > 1e-6) this.clearTracking();
+    this.imageAspectRatio = aspect;
     const m = this.measure(frame);
     if (typeof m === 'string') {
       this.clearTracking();
@@ -100,7 +104,8 @@ export class PushUpDetector {
       if (now - a.startedAt > c.maxAttemptDurationMs) {
         this.finish(now, this.error(a) ?? (a.reachedBottom ? 'incomplete_lockout' : 'too_shallow'));
       } else if (this.phase === 'descending') {
-        if (this.held('depth', elbow <= c.bottomElbowAngleMax, now, c.bottomHoldMs)) {
+        // Confirm depth on observed frames: smoothing must not erase a brief valid bottom.
+        if (this.held('depth', m.elbowAngle <= c.bottomElbowAngleMax, now, c.bottomHoldMs)) {
           a.reachedBottom = true;
           this.changePhase('bottom', elbow, now);
         } else if (this.held('reverse', elbow >= a.minAngle + c.directionAngleDelta, now, c.transitionHoldMs)) {
@@ -136,23 +141,27 @@ export class PushUpDetector {
       feedback: errorCode ? PUSH_UP_FEEDBACK[errorCode] : repJustCounted ? 'Повтор засчитан · REP +1' :
         !ready ? 'Прими верхнюю позицию и выпрями руки' : null,
       trackingStatus: ready ? 'ready' : 'unreliable', activeSide: this.side,
-      metrics: { elbowAngle: elbow, bodyAngle: m.bodyAngle, hipOffsetRatio: m.hipOffsetRatio },
+      metrics: { elbowAngle: elbow, bodyAngle: m.bodyAngle, hipOffsetRatio: m.hipOffsetRatio, kneeAngle: m.kneeAngle },
     };
   }
 
-  private reliable(p: PosePoint | undefined): p is PosePoint {
-    return !!p && [p.x, p.y, p.z, p.visibility, p.presence ?? 1].every(Number.isFinite) &&
-      (p.visibility ?? 0) >= this.config.minVisibility && (p.presence ?? 1) >= this.config.minPresence;
+  private reliable(p: PosePoint | undefined, minVisibility = this.config.minVisibility): p is PosePoint {
+    return !!p && [p.x, p.y, p.visibility, p.presence ?? 1].every(Number.isFinite) &&
+      (p.visibility ?? 0) >= minVisibility && (p.presence ?? 1) >= this.config.minPresence;
   }
   private measure(frame: PushUpFrame): Measurement | Exclude<PushUpTrackingStatus, 'ready'> {
-    const image = frame.landmarks, world = frame.worldLandmarks;
+    const image = frame.landmarks;
     if (!image?.length) return 'searching';
-    if (!world) return 'unreliable';
+    const aspect = frame.imageAspectRatio ?? 1;
+    if (!Number.isFinite(aspect) || aspect <= 0) return 'unreliable';
+    // Side-view motion is measured in the camera plane. Model-estimated depth can
+    // bend an otherwise straight visible leg and distort elbow extension.
+    const project = (id: number): PosePoint => ({ ...image[id], x: image[id].x * aspect, z: 0 });
     const score = (side: PushUpSide) => {
       const ids = SIDES[side], margin = this.config.frameMargin;
-      if (ids.some(id => !this.reliable(image[id]) || !this.reliable(world[id]) ||
+      if (ids.some(id => !this.reliable(image[id], id >= 25 ? this.config.minLegVisibility : this.config.minVisibility) ||
           image[id].x < margin || image[id].x > 1 - margin || image[id].y < margin || image[id].y > 1 - margin)) return -1;
-      return ids.reduce((sum, id) => sum + Math.min(image[id].visibility!, world[id].visibility!, image[id].presence ?? 1, world[id].presence ?? 1), 0) / ids.length;
+      return ids.reduce((sum, id) => sum + Math.min(image[id].visibility!, image[id].presence ?? 1), 0) / ids.length;
     };
     const scores = { left: score('left'), right: score('right') };
     if (this.side && (this.armed || this.attempt)) {
@@ -166,14 +175,14 @@ export class PushUpDetector {
         this.holds.clear();
       }
     }
-    const [s, e, w, h, k, a] = SIDES[this.side!].map(id => world[id]);
+    const [s, e, w, h, k, a] = SIDES[this.side!].map(project);
     const torso = distance(s, h), length = distance(s, a);
     if (torso <= 1e-6 || length <= 1e-6) return 'unreliable';
-    // Use metric world XY, not differently scaled normalized image X/Y.
+    // Compare pair separation in the same aspect-corrected camera plane.
     // If the far side is occluded, its uncertain coordinates must not veto the visible side.
     for (const [left, right] of [[11, 12], [23, 24]]) {
-      if (this.reliable(image[left]) && this.reliable(image[right]) && this.reliable(world[left]) && this.reliable(world[right]) &&
-          Math.hypot(world[left].x - world[right].x, world[left].y - world[right].y) / torso > this.config.maxSidePairToTorsoRatio) return 'wrong_angle';
+      if (this.reliable(image[left]) && this.reliable(image[right]) &&
+          distance(project(left), project(right)) / torso > this.config.maxSidePairToTorsoRatio) return 'wrong_angle';
     }
     if (Math.abs(a.y - s.y) / length > this.config.maxBodyVerticalRatio) return 'wrong_angle';
     const elbowAngle = angle(s, e, w), bodyAngle = angle(s, h, a), kneeAngle = angle(h, k, a);
@@ -213,12 +222,12 @@ export class PushUpDetector {
   }
   private clearTracking() {
     this.phase = 'top'; this.side = null; this.armed = false; this.attempt = null;
-    this.smoothAngle = null; this.outcome = null; this.holds.clear();
+    this.smoothAngle = null; this.imageAspectRatio = null; this.outcome = null; this.holds.clear();
   }
   private neutral(trackingStatus: PushUpTrackingStatus): PushUpDetectionResult {
     const feedback = { searching: 'SEARCHING FOR USER...', unreliable: 'Покажи всё тело в кадре', wrong_angle: 'Повернись боком к камере', ready: null };
     return { phase: 'top', repCount: this.repCount, repJustCounted: false, formStatus: 'idle',
       errorCode: null, feedback: feedback[trackingStatus], trackingStatus, activeSide: null,
-      metrics: { elbowAngle: null, bodyAngle: null, hipOffsetRatio: null } };
+      metrics: { elbowAngle: null, bodyAngle: null, hipOffsetRatio: null, kneeAngle: null } };
   }
 }
