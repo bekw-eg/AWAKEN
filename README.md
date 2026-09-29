@@ -194,24 +194,28 @@ npm run prepare:assets
 
 ## 6. Git-инструкции
 
-Рабочая и основная ветка репозитория — `main`, включая этап 2 и исправления детектора.
-Перед работой:
+`main` — защищённая ветка по правилу пользователя. Каждая задача выполняется
+в отдельной `feature/`-ветке. Перед новой задачей при чистой рабочей копии:
 
 ```bash
 git checkout main
 git pull --ff-only
+git checkout -b feature/<название-задачи>
 ```
 
 После реализации:
 
 ```bash
+git status
 git add .
 git commit -m "feat: implement squat detection state machine"
-git push origin main
+git push -u origin feature/<название-задачи>
 ```
 
-Ветка `feature/squat-detector` сохранена как история разработки этапа 2.
-Перед push проверяй обновления коллабораторов через `git fetch origin`.
+Перед каждым изменением кода проверяй `git branch --show-current`: в `main`
+файлы изменять нельзя. Перед push проверяй обновления коллабораторов через `git fetch origin`.
+После push feature-ветки работа агента заканчивается. Пользователь сам создаёт Pull Request
+и выполняет merge; агент не мержит и не отправляет изменения напрямую в `main`.
 
 Альтернатива — три отдельных коммита:
 
@@ -224,4 +228,38 @@ git push origin main
 - [MediaPipe Pose Landmarker для Web](https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker/web_js)
 - [Vite — Getting Started](https://vite.dev/guide/)
 
-Следующий этап сможет использовать `repJustCounted`, `formStatus` и `errorCode` для игровой логики.
+## Game Core
+
+`src/game/types.ts` задаёт контракт `ExerciseEvent`: упражнение (`squat`,
+`jumping-jack`, `knee-raise`), результат (`correct` / `incorrect`), timestamp и
+необязательный errorCode. `applyExerciseEvent` — чистая функция без зависимости
+от Computer Vision. `useGameState` предоставляет общий `handleExerciseEvent`
+для детекторов и dev-панели. Каждый producer должен отправлять одно событие на
+попытку; timestamp — метаданные, а не уникальный ID события.
+
+Правильное повторение даёт 10 XP, каждый уровень требует 100 XP с переносом
+остатка. По 10 повторений дают +1 STR / END / AGI, каждую характеристику один
+раз. Все три цели вместе дают ещё 150 XP и 100 gold один раз. После завершения
+целей повторения продолжают давать обычные 10 XP.
+
+Прогресс хранится в памяти текущей сессии. Перезагрузка страницы начинает игру
+заново; сохранения и автоматического сброса по календарю пока нет.
+
+### Проверка вручную
+
+1. Запустить `npm run dev`, открыть локальный адрес и разрешить камеру.
+2. Встать полностью в кадр, пройти калибровку и выполнить приседание:
+   XP увеличивается на 10, Squats — на 1. После 10 приседаний: level 2,
+   XP 0, STR 2. Следующий rep даёт XP, но не дополнительный STR.
+3. Либо нажать RESET GAME и SIMULATE SQUAT 10 раз. Затем нажать
+   SIMULATE JUMPING JACK и SIMULATE KNEE RAISE по 10 раз.
+4. Проверить DAILY QUEST COMPLETE, level 5, XP 50/100, STR/END/AGI 2,
+   gold 100. Ещё один rep даёт только 10 XP; gold остаётся 100.
+5. RESET GAME сбрасывает игрока и задание. Сброс счётчика камеры отдельно
+   не сбрасывает игровой прогресс. После него новые приседания снова учитываются.
+6. В `npm run build` / `npm run preview` dev-панель отсутствует.
+
+Проверки: `npm test` и `npm run build`. Тесты покрывают чистую игровую логику,
+однократные награды, React StrictMode, сброс и передачу результатов существующего
+Squat Detector через синтетические pose frames. Проверку физической камеры
+нужно выполнить вручную.

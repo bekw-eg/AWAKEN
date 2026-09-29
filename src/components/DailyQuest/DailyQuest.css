@@ -1,0 +1,6 @@
+.quest-objective { margin-top: 19px; }
+.quest-objective label { display: flex; justify-content: space-between; gap: 12px; }
+.quest-objective label span { color: #b5e6eb; white-space: nowrap; }
+.quest-objective .game-hint { margin: 6px 0 0; }
+.quest-reward { display: grid; gap: 9px; margin-top: 20px; padding-top: 16px; border-top: 1px solid #30424e; font-size: 10px; line-height: 1.6; color: #a7becb; }
+.quest-reward.complete { color: #99f0cf; }

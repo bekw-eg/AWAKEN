@@ -1,5 +1,5 @@
-import { CameraView } from './components/Camera/CameraView';
+import { Dashboard } from './pages/Dashboard/Dashboard';
 
 export default function App() {
-  return <CameraView />;
+  return <Dashboard />;
 }
