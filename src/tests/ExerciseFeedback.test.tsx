@@ -11,7 +11,7 @@ describe('ExerciseFeedback', () => {
     render(<ExerciseFeedback result={new SquatDetector().getResult()} onReset={() => {}} />);
     expect(screen.getByRole('status').textContent).toContain('SEARCHING FOR USER');
     expect(screen.queryByText('FORM ERROR')).toBeNull();
-    expect(screen.getAllByText('—')).toHaveLength(6);
+    expect(screen.getAllByText('—')).toHaveLength(7);
   });
 
   it('shows exactly one prioritized error and exposes the reset action', () => {

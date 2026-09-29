@@ -33,6 +33,7 @@ export function ExerciseFeedback({ result, onReset }: Props) {
           <div><dt>Torso lean</dt><dd>{format(metrics.torsoLeanDeg, '°')}</dd></div>
           <div><dt>Knee / ankle width</dt><dd>{format(metrics.kneeDistanceRatio, '', 2)}</dd></div>
           <div><dt>Hip drop / torso</dt><dd>{format(metrics.hipDepthDelta, '', 2)}</dd></div>
+          <div><dt>Hip drop (camera)</dt><dd>{format(metrics.imageHipDepthDelta, '', 2)}</dd></div>
         </dl>
       </details>
       <p className="exercise-tip" lang="ru">Встань лицом к камере, покажи всё тело и замри на секунду. После потери трекинга снова выпрямись.</p>

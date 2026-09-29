@@ -11,6 +11,8 @@ export const DEFAULT_SQUAT_CONFIG: Readonly<SquatConfig> = {
   calibrationMs: 1000,
   calibrationMinFrames: 12,
   calibrationMaxLeanDeg: 25,
+  calibrationKneeAngleMin: 150,
+  standingAngleToleranceDeg: 5,
   calibrationMaxHipDrift: 0.08,
   maxBodyScaleChange: 0.25,
   standingKneeAngleMin: 160,
@@ -19,14 +21,19 @@ export const DEFAULT_SQUAT_CONFIG: Readonly<SquatConfig> = {
   bottomExitKneeAngleMin: 125,
   minAttemptHipDrop: 0.08,
   minHipDepthDelta: 0.25,
+  frontalStartHipDrop: 0.12,
+  frontalDepthHipDrop: 0.4,
+  frontalThighCompression: 0.18,
+  frontalDirectionDelta: 0.08,
+  frontalLockoutCompression: 0.02,
   maxStandingHipDelta: 0.1,
   maxTorsoLeanDeg: 35,
   minKneeDistanceRatio: 0.65,
   directionAngleDelta: 10,
   progressAngleDelta: 3,
   transitionHoldMs: 120,
-  bottomHoldMs: 150,
-  standingHoldMs: 200,
+  bottomHoldMs: 60,
+  standingHoldMs: 120,
   formErrorHoldMs: 180,
   shallowFeedbackDelayMs: 1000,
   lockoutFeedbackDelayMs: 800,
@@ -47,19 +54,24 @@ export const SQUAT_FEEDBACK: Record<SquatErrorCode, string> = {
 const REQUIRED = [11, 12, 23, 24, 25, 26, 27, 28] as const;
 const EMPTY_METRICS: SquatMetrics = {
   leftKneeAngle: null, rightKneeAngle: null, avgKneeAngle: null,
-  torsoLeanDeg: null, kneeDistanceRatio: null, hipDepthDelta: null,
+  torsoLeanDeg: null, kneeDistanceRatio: null, hipDepthDelta: null, imageHipDepthDelta: null,
 };
 type Measurement = {
   leftKneeAngle: number; rightKneeAngle: number; avgKneeAngle: number;
   torsoLeanDeg: number; kneeDistanceRatio: number; hipHeight: number; torsoLength: number;
+  imageHipHeight: number; imageTorsoLength: number; leftThighHeight: number; rightThighHeight: number;
 };
 type Attempt = {
   startedAt: number;
   reachedBottom: boolean;
+  imageDepthUsed: boolean;
   minAngle: number;
   maxAscentAngle: number;
   progressAngle: number;
   lastProgressAt: number;
+  maxImageDepth: number;
+  minAscentImageDepth: number;
+  progressImageDepth: number;
   errors: Set<SquatErrorCode>;
 };
 
@@ -69,7 +81,7 @@ export class SquatDetector {
   private repCount = 0;
   private lastTimestamp: number | null = null;
   private lastFinishedAt = -Infinity;
-  private baseline: { hipHeight: number; torsoLength: number } | null = null;
+  private baseline: Measurement | null = null;
   private calibration: { since: number; samples: Measurement[] } | null = null;
   private smooth: Measurement | null = null;
   private attempt: Attempt | null = null;
@@ -129,7 +141,11 @@ export class SquatDetector {
       }
     } else this.smooth = { ...measured };
     const m = this.smooth;
-    const straight = Math.min(m.leftKneeAngle, m.rightKneeAngle) >= this.config.standingKneeAngleMin;
+    const leftTopAngle = this.baseline ? Math.min(this.config.standingKneeAngleMin,
+      this.baseline.leftKneeAngle - this.config.standingAngleToleranceDeg) : this.config.calibrationKneeAngleMin;
+    const rightTopAngle = this.baseline ? Math.min(this.config.standingKneeAngleMin,
+      this.baseline.rightKneeAngle - this.config.standingAngleToleranceDeg) : this.config.calibrationKneeAngleMin;
+    const straight = m.leftKneeAngle >= leftTopAngle && m.rightKneeAngle >= rightTopAngle;
 
     if (!this.baseline) {
       const upright = straight && m.torsoLeanDeg <= this.config.calibrationMaxLeanDeg &&
@@ -143,11 +159,12 @@ export class SquatDetector {
         this.calibration!.samples.push({ ...m });
         const { since, samples } = this.calibration!;
         if (now - since >= this.config.calibrationMs && samples.length >= this.config.calibrationMinFrames) {
-          const median = (key: 'hipHeight' | 'torsoLength') => {
+          const median = (key: keyof Measurement) => {
             const values = samples.map((sample) => sample[key]).sort((a, b) => a - b);
             return values[Math.floor(values.length / 2)];
           };
-          this.baseline = { hipHeight: median('hipHeight'), torsoLength: median('torsoLength') };
+          this.baseline = { ...m };
+          for (const key of Object.keys(m) as (keyof Measurement)[]) this.baseline[key] = median(key);
           this.calibration = null;
           this.armed = true;
         }
@@ -157,28 +174,43 @@ export class SquatDetector {
           this.calibration.samples.length / this.config.calibrationMinFrames) : 0;
         this.result = {
           ...this.neutral('calibrating'),
-          metrics: { ...m, hipDepthDelta: null },
+          metrics: { ...m, hipDepthDelta: null, imageHipDepthDelta: null },
           calibrationProgress: progress,
+          feedback: !straight ? 'Полностью выпрямись для калибровки' :
+            m.torsoLeanDeg > this.config.calibrationMaxLeanDeg ? 'Выпрями корпус для калибровки' :
+            m.kneeDistanceRatio < this.config.minKneeDistanceRatio ? 'Разведи колени для калибровки' :
+            'Стой прямо — запоминаю исходное положение',
         };
         return this.result;
       }
     }
 
     const hipDepthDelta = (this.baseline.hipHeight - m.hipHeight) / this.baseline.torsoLength;
+    // Image heights are divided by shoulder width before calibration: translation and
+    // uniform changes in camera distance cannot masquerade as lowering the hips.
+    const imageHipDepthDelta = (this.baseline.imageHipHeight - m.imageHipHeight) / this.baseline.imageTorsoLength;
+    const leftCompression = (this.baseline.leftThighHeight - m.leftThighHeight) / this.baseline.leftThighHeight;
+    const rightCompression = (this.baseline.rightThighHeight - m.rightThighHeight) / this.baseline.rightThighHeight;
+    const imageExtended = Math.max(leftCompression, rightCompression) <= this.config.frontalLockoutCompression;
     const metrics: SquatMetrics = {
       leftKneeAngle: m.leftKneeAngle, rightKneeAngle: m.rightKneeAngle, avgKneeAngle: m.avgKneeAngle,
-      torsoLeanDeg: m.torsoLeanDeg, kneeDistanceRatio: m.kneeDistanceRatio, hipDepthDelta,
+      torsoLeanDeg: m.torsoLeanDeg, kneeDistanceRatio: m.kneeDistanceRatio, hipDepthDelta, imageHipDepthDelta,
     };
-    const atTop = straight && Math.abs(hipDepthDelta) <= this.config.maxStandingHipDelta;
+    const atTop = imageExtended && (straight || this.attempt?.imageDepthUsed === true) &&
+      Math.abs(imageHipDepthDelta) <= this.config.maxStandingHipDelta;
     let repJustCounted = false;
 
     if (!this.attempt) {
       if (!this.armed && this.held('rearm', atTop, now, this.config.standingHoldMs)) this.armed = true;
-      const descending = m.avgKneeAngle <= this.config.descendingKneeAngleMax && hipDepthDelta >= this.config.minAttemptHipDrop;
+      const worldDescending = m.avgKneeAngle <= this.config.descendingKneeAngleMax && hipDepthDelta >= this.config.minAttemptHipDrop;
+      const imageDescending = imageHipDepthDelta >= this.config.frontalStartHipDrop &&
+        Math.min(leftCompression, rightCompression) > this.config.frontalLockoutCompression;
+      const descending = worldDescending || imageDescending;
       if (this.armed && this.held('start', descending, now, this.config.transitionHoldMs)) {
         this.attempt = {
-          startedAt: now, reachedBottom: false, minAngle: m.avgKneeAngle,
+          startedAt: now, reachedBottom: false, imageDepthUsed: false, minAngle: m.avgKneeAngle,
           maxAscentAngle: m.avgKneeAngle, progressAngle: m.avgKneeAngle, lastProgressAt: now, errors: new Set(),
+          maxImageDepth: imageHipDepthDelta, minAscentImageDepth: imageHipDepthDelta, progressImageDepth: imageHipDepthDelta,
         };
         this.phase = 'descending';
         this.armed = false;
@@ -201,28 +233,41 @@ export class SquatDetector {
         attempt.errors.add('torso_lean');
       }
       attempt.minAngle = Math.min(attempt.minAngle, m.avgKneeAngle);
+      attempt.maxImageDepth = Math.max(attempt.maxImageDepth, imageHipDepthDelta);
       const goingUp = this.phase === 'ascending';
       if ((goingUp && m.avgKneeAngle > attempt.progressAngle + this.config.progressAngleDelta) ||
-          (!goingUp && m.avgKneeAngle < attempt.progressAngle - this.config.progressAngleDelta)) {
+          (!goingUp && m.avgKneeAngle < attempt.progressAngle - this.config.progressAngleDelta) ||
+          (goingUp && imageHipDepthDelta < attempt.progressImageDepth - this.config.frontalDirectionDelta) ||
+          (!goingUp && imageHipDepthDelta > attempt.progressImageDepth + this.config.frontalDirectionDelta)) {
         attempt.progressAngle = m.avgKneeAngle;
         attempt.lastProgressAt = now;
+        attempt.progressImageDepth = imageHipDepthDelta;
       }
 
       if (this.phase === 'descending') {
-        const deep = Math.max(m.leftKneeAngle, m.rightKneeAngle) <= this.config.bottomKneeAngleMax &&
+        const worldDeep = Math.max(m.leftKneeAngle, m.rightKneeAngle) <= this.config.bottomKneeAngleMax &&
           hipDepthDelta >= this.config.minHipDepthDelta;
+        const imageDeep = imageHipDepthDelta >= this.config.frontalDepthHipDrop &&
+          Math.min(leftCompression, rightCompression) >= this.config.frontalThighCompression;
+        const deep = worldDeep || imageDeep;
         if (this.held('depth', deep, now, this.config.bottomHoldMs)) {
           attempt.reachedBottom = true;
-          this.changePhase('bottom', now, m.avgKneeAngle);
-        } else if (this.held('reverse', m.avgKneeAngle >= attempt.minAngle + this.config.directionAngleDelta, now, this.config.transitionHoldMs)) {
-          this.changePhase('ascending', now, m.avgKneeAngle);
+          attempt.imageDepthUsed = !worldDeep;
+          this.changePhase('bottom', now, m.avgKneeAngle, imageHipDepthDelta);
+        } else if (this.held('reverse', m.avgKneeAngle >= attempt.minAngle + this.config.directionAngleDelta ||
+            imageHipDepthDelta <= attempt.maxImageDepth - this.config.frontalDirectionDelta, now, this.config.transitionHoldMs)) {
+          this.changePhase('ascending', now, m.avgKneeAngle, imageHipDepthDelta);
         }
       } else if (this.phase === 'bottom') {
-        if (this.held('rise', m.avgKneeAngle >= this.config.bottomExitKneeAngleMin, now, this.config.transitionHoldMs)) {
-          this.changePhase('ascending', now, m.avgKneeAngle);
+        const rising = (m.avgKneeAngle >= this.config.bottomExitKneeAngleMin &&
+          m.avgKneeAngle >= attempt.minAngle + this.config.directionAngleDelta) ||
+          imageHipDepthDelta <= attempt.maxImageDepth - this.config.frontalDirectionDelta;
+        if (this.held('rise', rising, now, this.config.transitionHoldMs)) {
+          this.changePhase('ascending', now, m.avgKneeAngle, imageHipDepthDelta);
         }
       } else if (this.phase === 'ascending') {
         attempt.maxAscentAngle = Math.max(attempt.maxAscentAngle, m.avgKneeAngle);
+        attempt.minAscentImageDepth = Math.min(attempt.minAscentImageDepth, imageHipDepthDelta);
         if (this.held('top', atTop, now, this.config.standingHoldMs)) {
           const error = !attempt.reachedBottom ? 'too_shallow' : this.firstError(attempt.errors);
           if (!error && now - attempt.startedAt >= this.config.minRepDurationMs &&
@@ -234,12 +279,16 @@ export class SquatDetector {
           this.lastFinishedAt = now;
           this.attempt = null;
           this.phase = 'standing';
+          // The top has already been confirmed. Requiring a second hold loses continuous reps.
+          this.armed = true;
           this.holds.clear();
-        } else if (this.held('bounce', m.avgKneeAngle <= attempt.maxAscentAngle - this.config.directionAngleDelta, now, this.config.transitionHoldMs)) {
+        } else if (this.held('bounce', m.avgKneeAngle <= attempt.maxAscentAngle - this.config.directionAngleDelta ||
+            imageHipDepthDelta >= attempt.minAscentImageDepth + this.config.frontalDirectionDelta, now, this.config.transitionHoldMs)) {
           // A second descent before full extension cannot reuse a previous bottom.
           attempt.errors.add('incomplete_lockout');
           attempt.minAngle = m.avgKneeAngle;
-          this.changePhase('descending', now, m.avgKneeAngle);
+          attempt.maxImageDepth = imageHipDepthDelta;
+          this.changePhase('descending', now, m.avgKneeAngle, imageHipDepthDelta);
         }
       }
     }
@@ -258,7 +307,10 @@ export class SquatDetector {
     this.result = {
       phase: this.phase, repCount: this.repCount, repJustCounted,
       formStatus: errorCode ? 'error' : 'good', errorCode,
-      feedback: errorCode ? SQUAT_FEEDBACK[errorCode] : justFinished && !this.outcome!.error ? 'Повтор засчитан · REP +1' : null,
+      feedback: errorCode ? SQUAT_FEEDBACK[errorCode] : justFinished && !this.outcome!.error ? 'Повтор засчитан · REP +1' :
+        this.phase === 'descending' ? 'Опускай таз ниже — проверяю глубину' :
+        this.phase === 'bottom' ? 'Глубина достигнута — поднимайся' :
+        this.phase === 'ascending' ? 'Вернись в исходную стойку, чтобы засчитать повтор' : null,
       metrics, trackingStatus: 'ready', calibrationProgress: 1,
     };
     return this.result;
@@ -291,11 +343,21 @@ export class SquatDetector {
     const rightKneeAngle = angle(world[24], world[26], world[28]);
     const torsoLeanDeg = leanFromVertical(shoulders, hips);
     const kneeDistanceRatio = normalizedRatio(Math.abs(world[25].x - world[26].x), stance);
+    const imageShoulders = midpoint(image[11], image[12]);
+    const imageHips = midpoint(image[23], image[24]);
+    const imageAnkles = midpoint(image[27], image[28]);
+    const imageWidth = Math.abs(image[11].x - image[12].x);
+    const imageHipHeight = normalizedRatio(imageAnkles.y - imageHips.y, imageWidth);
+    const imageTorsoLength = normalizedRatio(imageHips.y - imageShoulders.y, imageWidth);
+    const leftThighHeight = normalizedRatio(image[25].y - image[23].y, imageWidth);
+    const rightThighHeight = normalizedRatio(image[26].y - image[24].y, imageWidth);
     if (leftKneeAngle === null || rightKneeAngle === null || torsoLeanDeg === null || kneeDistanceRatio === null ||
-        ankles.y <= hips.y) return 'unreliable';
+        imageHipHeight === null || imageTorsoLength === null || imageTorsoLength <= 0 ||
+        leftThighHeight === null || rightThighHeight === null || ankles.y <= hips.y) return 'unreliable';
     return {
       leftKneeAngle, rightKneeAngle, avgKneeAngle: (leftKneeAngle + rightKneeAngle) / 2,
       torsoLeanDeg, kneeDistanceRatio, hipHeight: ankles.y - hips.y, torsoLength,
+      imageHipHeight, imageTorsoLength, leftThighHeight, rightThighHeight,
     };
   }
 
@@ -305,7 +367,7 @@ export class SquatDetector {
     return now - this.holds.get(key)! >= duration;
   }
 
-  private changePhase(phase: SquatPhase, now: number, kneeAngle: number) {
+  private changePhase(phase: SquatPhase, now: number, kneeAngle: number, imageDepth: number) {
     this.phase = phase;
     // Keep form debounce timers across phase boundaries.
     for (const key of ['depth', 'reverse', 'rise', 'top', 'bounce']) this.holds.delete(key);
@@ -313,6 +375,8 @@ export class SquatDetector {
       this.attempt.progressAngle = kneeAngle;
       this.attempt.lastProgressAt = now;
       this.attempt.maxAscentAngle = kneeAngle;
+      this.attempt.minAscentImageDepth = imageDepth;
+      this.attempt.progressImageDepth = imageDepth;
     }
   }
 

@@ -9,6 +9,11 @@
 Новых npm-зависимостей для него не требуется. После запуска встань лицом к камере,
 покажи плечи, таз, колени и лодыжки, затем постой прямо примерно секунду для калибровки.
 
+Исправлен случай, когда скелет движется, а фаза остаётся `standing`: кроме 3D-углов
+детектор проверяет опускание таза и сгибание обеих ног в изображении. Расстояния
+нормализованы относительно ширины плеч и исходной стойки. В DEBUG METRICS добавлен
+`Hip drop (camera)`. Повторный hold после зачёта больше не требуется.
+
 ## 1. Пакеты и установка
 
 Нужен Node.js 22.12+ (проверено на 22.22.2) и браузер с webcam API.
@@ -189,13 +194,12 @@ npm run prepare:assets
 
 ## 6. Git-инструкции
 
-Основная ветка репозитория — `main`. По заданию этап 2 реализуется в `feature/squat-detector`.
-Для создания такой ветки в свежем клоне:
+Рабочая и основная ветка репозитория — `main`, включая этап 2 и исправления детектора.
+Перед работой:
 
 ```bash
 git checkout main
-git pull
-git checkout -b feature/squat-detector
+git pull --ff-only
 ```
 
 После реализации:
@@ -203,11 +207,11 @@ git checkout -b feature/squat-detector
 ```bash
 git add .
 git commit -m "feat: implement squat detection state machine"
-git push -u origin feature/squat-detector
+git push origin main
 ```
 
-Если ветка уже существует, используй `git checkout feature/squat-detector` и
-`git pull --ff-only`. Перед push проверяй обновления коллабораторов через `git fetch origin`.
+Ветка `feature/squat-detector` сохранена как история разработки этапа 2.
+Перед push проверяй обновления коллабораторов через `git fetch origin`.
 
 Альтернатива — три отдельных коммита:
 

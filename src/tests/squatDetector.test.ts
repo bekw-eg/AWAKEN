@@ -17,6 +17,89 @@ describe('geometry', () => {
 });
 
 describe('squat state machine', () => {
+  it('counts frontal image motion even when world knee angles remain standing', () => {
+    const recording = new SquatSequence();
+    recording.calibrate();
+    recording.rep();
+    recording.rep();
+    const detector = new SquatDetector();
+    const standingWorld = squatFrame(0).worldLandmarks;
+    const results = recording.frames.map((frame) => detector.update({ ...frame, worldLandmarks: standingWorld }));
+    expect(results.some((result) => result.phase === 'descending')).toBe(true);
+    expect(results.some((result) => result.phase === 'bottom')).toBe(true);
+    expect(detector.getResult().repCount).toBe(2);
+  });
+
+  it('requires full image lockout when unreliable world angles look straight throughout', () => {
+    const recording = new SquatSequence();
+    recording.calibrate();
+    recording.ramp(175, 85, 1000);
+    recording.hold({ knee: 85 }, 400);
+    recording.ramp(85, 145, 1000);
+    recording.hold({ knee: 145 }, 1500);
+    const detector = new SquatDetector();
+    const standingWorld = squatFrame(0).worldLandmarks;
+    recording.frames.forEach((frame) => detector.update({ ...frame, worldLandmarks: standingWorld }));
+    expect(detector.getResult().repCount).toBe(0);
+    expect(detector.getResult().errorCode).toBe('incomplete_lockout');
+    const before = recording.frames.length;
+    recording.ramp(145, 175, 500);
+    recording.hold({}, 400);
+    recording.frames.slice(before).forEach((frame) => detector.update({ ...frame, worldLandmarks: standingWorld }));
+    expect(detector.getResult().repCount).toBe(1);
+  });
+
+  it('does not turn a shallow image squat into a valid rep', () => {
+    const recording = new SquatSequence();
+    recording.calibrate();
+    recording.rep({}, 132);
+    const detector = new SquatDetector();
+    const standingWorld = squatFrame(0).worldLandmarks;
+    recording.frames.forEach((frame) => detector.update({ ...frame, worldLandmarks: standingWorld }));
+    expect(detector.getResult().repCount).toBe(0);
+    expect(detector.getResult().errorCode).toBe('too_shallow');
+  });
+
+  it('ignores image translation and uniform scaling without leg folding', () => {
+    const s = new SquatSequence();
+    s.calibrate();
+    for (let i = 0; i < 60; i++) {
+      s.frame({}, (frame) => {
+        const scale = 0.85 + 0.1 * Math.sin(i / 10);
+        frame.landmarks = frame.landmarks!.map((p) => ({ ...p,
+          x: 0.5 + (p.x - 0.5) * scale, y: 0.5 + (p.y - 0.5) * scale + 0.01 * Math.sin(i / 6),
+        }));
+      });
+    }
+    expect(s.result.repCount).toBe(0);
+    expect(s.result.phase).toBe('standing');
+    expect(s.result.metrics.imageHipDepthDelta).toBeCloseTo(0);
+  });
+
+  it.each([1200, 1800, 2500])('counts continuous %i ms squats without artificial pauses', (period) => {
+    const s = new SquatSequence();
+    s.calibrate();
+    for (let cycle = 0; cycle < 3; cycle++) {
+      for (let elapsed = 50; elapsed <= period; elapsed += 50) {
+        const knee = 175 - 70 * (1 - Math.cos(2 * Math.PI * elapsed / period)) / 2;
+        s.frame({ knee });
+      }
+    }
+    s.hold({}, 250);
+    expect(s.result.repCount).toBe(3);
+  });
+
+  it('calibrates and completes reps when the camera estimates upright knees at 155 degrees', () => {
+    const s = new SquatSequence();
+    s.hold({ knee: 155 }, 1600);
+    expect(s.result.trackingStatus).toBe('ready');
+    s.ramp(155, 90, 1000);
+    s.hold({ knee: 90 }, 300);
+    s.ramp(90, 155, 1000);
+    s.hold({ knee: 155 }, 350);
+    expect(s.result.repCount).toBe(1);
+  });
+
   it('requires upright calibration and a full four-phase cycle', () => {
     const s = new SquatSequence();
     s.hold({ knee: 85 }, 1500);
@@ -159,7 +242,7 @@ describe('squat state machine', () => {
 
   it('requires hip travel in addition to knee angles', () => {
     // Angle movement remains the same, but the required hip travel exceeds this fixture's depth.
-    const s = new SquatSequence(new SquatDetector({ minHipDepthDelta: 0.8 }));
+    const s = new SquatSequence(new SquatDetector({ minHipDepthDelta: 0.8, frontalDepthHipDrop: 0.8 }));
     s.calibrate();
     s.rep();
     expect(s.result.repCount).toBe(0);
@@ -171,7 +254,8 @@ describe('squat state machine', () => {
     s.calibrate();
     s.ramp(175, 85, 1000);
     s.hold({ knee: 85 }, 400);
-    for (let i = 0; i < 20; i++) s.frame({ knee: i % 2 ? 124 : 126 });
+    const bottomImage = squatFrame(0, { knee: 85 }).landmarks;
+    for (let i = 0; i < 20; i++) s.frame({ knee: i % 2 ? 124 : 126 }, (frame) => { frame.landmarks = bottomImage; });
     expect(s.result.phase).toBe('bottom');
     expect(s.result.repCount).toBe(0);
   });

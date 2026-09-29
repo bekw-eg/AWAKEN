@@ -18,6 +18,7 @@ export type SquatMetrics = {
   torsoLeanDeg: number | null;
   kneeDistanceRatio: number | null;
   hipDepthDelta: number | null;
+  imageHipDepthDelta: number | null;
 };
 
 export type SquatDetectionResult = {
@@ -41,6 +42,8 @@ export type SquatConfig = {
   calibrationMs: number;
   calibrationMinFrames: number;
   calibrationMaxLeanDeg: number;
+  calibrationKneeAngleMin: number;
+  standingAngleToleranceDeg: number;
   calibrationMaxHipDrift: number;
   maxBodyScaleChange: number;
   standingKneeAngleMin: number;
@@ -49,6 +52,11 @@ export type SquatConfig = {
   bottomExitKneeAngleMin: number;
   minAttemptHipDrop: number;
   minHipDepthDelta: number;
+  frontalStartHipDrop: number;
+  frontalDepthHipDrop: number;
+  frontalThighCompression: number;
+  frontalDirectionDelta: number;
+  frontalLockoutCompression: number;
   maxStandingHipDelta: number;
   maxTorsoLeanDeg: number;
   minKneeDistanceRatio: number;
