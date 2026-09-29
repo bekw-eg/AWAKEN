@@ -11,7 +11,7 @@ vi.mock('../hooks/usePoseDetection');
 vi.mock('../components/PoseOverlay/PoseOverlay', () => ({ PoseOverlay: () => null }));
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => { cleanup(); vi.useRealTimers(); });
-it('runs push-up on existing frames without emitting game events and preserves count across modes', () => {
+it('emits one push-up game event on real frames and preserves count across modes without replay', () => {
   const pose: UsePoseDetectionResult = {
     landmarks: null, worldLandmarks: null, poseTimestampMs: null, cameraStatus: 'active', engineStatus: 'active',
     videoSize: { width: 1280, height: 720 }, error: null, isLoading: false, isPersonDetected: true,
@@ -29,17 +29,17 @@ it('runs push-up on existing frames without emitting game events and preserves c
     view.rerender(<CameraView onExerciseEvent={onExerciseEvent} />);
   }
   expect(screen.getByText('1')).toBeTruthy();
-  expect(onExerciseEvent).not.toHaveBeenCalled();
+  expect(onExerciseEvent).toHaveBeenCalledExactlyOnceWith({ exercise: 'push-up', status: 'correct', timestamp: expect.any(Number) });
   fireEvent.click(screen.getByRole('button', { name: 'SQUAT' }));
   expect(screen.getByRole('heading', { name: 'SQUAT TRAINING' })).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'PUSH-UP' }));
   expect(screen.getByText('1')).toBeTruthy();
-  expect(onExerciseEvent).not.toHaveBeenCalled();
-  fireEvent.change(screen.getByRole('combobox', { name: 'Exercise mode' }), { target: { value: 'jumping-jack' } });
+  expect(onExerciseEvent).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole('button', { name: 'JUMPING JACK' }));
   expect(screen.getByRole('heading', { name: 'JUMPING JACK' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'JUMPING JACK' }).getAttribute('aria-pressed')).toBe('true');
   fireEvent.click(screen.getByRole('button', { name: 'PUSH-UP' }));
-  expect((screen.getByRole('combobox') as HTMLSelectElement).value).toBe('push-up');
+  expect(screen.getByRole('button', { name: 'PUSH-UP' }).getAttribute('aria-pressed')).toBe('true');
   expect(screen.getByText('1')).toBeTruthy();
 });
 
@@ -87,10 +87,10 @@ it('counts jumping jacks and keeps their counter when switching to other modes',
       view.rerender(<CameraView onExerciseEvent={onExerciseEvent} />);
     }
   }
-  expect(screen.getByText('REPS 1')).toBeTruthy();
+  expect(screen.getByText('1')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'PUSH-UP' }));
   expect(screen.getByText('0')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'JUMPING JACK' }));
-  expect(screen.getByText('REPS 1')).toBeTruthy();
-  expect(onExerciseEvent).not.toHaveBeenCalled();
+  expect(screen.getByText('1')).toBeTruthy();
+  expect(onExerciseEvent).toHaveBeenCalledExactlyOnceWith({ exercise: 'jumping-jack', status: 'correct', timestamp: expect.any(Number) });
 });

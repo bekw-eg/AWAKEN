@@ -1,4 +1,5 @@
 import type { SquatDetectionResult } from '../../exercise-engine/types';
+import { Icon } from '../UI/Icon';
 import './ExerciseFeedback.css';
 
 type Props = { result: SquatDetectionResult; onReset: () => void };
@@ -13,7 +14,7 @@ export function ExerciseFeedback({ result, onReset }: Props) {
     <section className={`exercise-feedback form-${formStatus}`} aria-labelledby="exercise-title">
       <header className="exercise-header">
         <div><p className="eyebrow">TRAINING / 01</p><h2 id="exercise-title">SQUAT TRAINING</h2></div>
-        <button type="button" onClick={onReset}>СБРОСИТЬ СЧЁТЧИК</button>
+        <button type="button" onClick={onReset} aria-label="СБРОСИТЬ СЧЁТЧИК"><Icon name="RotateCcw" />RESET</button>
       </header>
       <div className="exercise-summary">
         <div className="rep-counter"><span key={repCount} className={repCount > 0 ? 'rep-value rep-flash' : 'rep-value'}>{repCount}</span><span>VALID REPS</span></div>

@@ -1,11 +1,12 @@
 import { useEffect, useRef } from 'react';
-import type { ExerciseEvent } from '../game/types';
+import type { ExerciseEvent, ExerciseType } from '../game/types';
 
 /** Keep the detector's rep identity across renders and StrictMode effect replays. */
 export function useSquatGameEvents(
   repCount: number,
   repJustCounted: boolean,
   onExerciseEvent: (event: ExerciseEvent) => void,
+  exercise: ExerciseType = 'squat',
 ) {
   const lastEmittedRep = useRef(0);
   useEffect(() => {
@@ -13,6 +14,6 @@ export function useSquatGameEvents(
     if (repCount < lastEmittedRep.current) lastEmittedRep.current = repCount;
     if (!repJustCounted || repCount <= lastEmittedRep.current) return;
     lastEmittedRep.current = repCount;
-    onExerciseEvent({ exercise: 'squat', status: 'correct', timestamp: Date.now() });
-  }, [repCount, repJustCounted, onExerciseEvent]);
+    onExerciseEvent({ exercise, status: 'correct', timestamp: Date.now() });
+  }, [repCount, repJustCounted, onExerciseEvent, exercise]);
 }

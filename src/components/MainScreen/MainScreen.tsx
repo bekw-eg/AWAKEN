@@ -1,74 +1,48 @@
 import type { GameState } from '../../game/types';
+import { generateEnemy } from '../../game/progression';
+import { DailyQuest } from '../DailyQuest/DailyQuest';
+import { PlayerStats } from '../PlayerStats/PlayerStats';
+import { Icon } from '../UI/Icon';
+import { PageHeader } from '../UI/PageHeader';
+import { ProgressBar } from '../UI/ProgressBar';
+import { JourneyMap } from './JourneyMap';
 import './MainScreen.css';
 
 type Props = {
   state: GameState;
   onStartWorkout: () => void;
   onStartBattle: () => void;
+  journeyOnly?: boolean;
 };
 
-export function MainScreen({ state, onStartWorkout, onStartBattle }: Props) {
-  const { player, currentEnemyIndex } = state;
-
-  return (
-    <div className="main-screen">
-      <header className="main-header">
-        <h1>LEVEL {player.level}</h1>
-        <div className="xp-bar">
-          <label>XP {player.xp} / {player.xpToNextLevel}</label>
-          <progress value={player.xp} max={player.xpToNextLevel} />
-        </div>
-      </header>
-
-      <section className="vital-stats">
-        <div className="stat-pill hp">
-          <span className="icon">❤️</span> {player.hp} / {player.maxHp}
-        </div>
-        <div className="stat-pill stamina">
-          <span className="icon">🔋</span> {player.stamina} / {player.stamina}
-        </div>
-      </section>
-
-      <section className="character-stats">
-        <h3>Stats</h3>
-        <div className="stats-grid">
-          <div>STR {player.strength}</div>
-          <div>AGI {player.agility}</div>
-          <div>POW {player.power}</div>
-          <div>VIT {player.vitality}</div>
-          <div>DEF {player.defense}</div>
-          <div>STA {player.stamina}</div>
-        </div>
-      </section>
-
-      <section className="adventure-map">
-        <h3>Adventure:</h3>
-        <ul className="road-map">
-          {Array.from({ length: 10 }).map((_, i) => {
-            const index = i + 1;
-            const status = index < currentEnemyIndex ? 'completed' : index === currentEnemyIndex ? 'current' : 'locked';
-            const icon = status === 'completed' ? '✓' : status === 'current' ? '●' : '🔒';
-            return (
-              <li key={index} className={`map-node ${status}`}>
-                {icon} Enemy {index}
-              </li>
-            );
-          })}
-          <li className={`map-node boss ${currentEnemyIndex === 10 ? 'current' : 'locked'}`}>
-            {currentEnemyIndex === 10 ? '🐉' : '🔒'} Boss
-          </li>
-        </ul>
-        <p className="progress-text">Progress: {Math.min(9, currentEnemyIndex - 1)} / 10</p>
-      </section>
-
-      <section className="action-buttons">
-        <button type="button" className="action-btn battle-btn" onClick={onStartBattle}>
-          START BATTLE
-        </button>
-        <button type="button" className="action-btn workout-btn" onClick={onStartWorkout}>
-          START WORKOUT
-        </button>
-      </section>
+export function MainScreen({ state, onStartWorkout, onStartBattle, journeyOnly = false }: Props) {
+  const nextEnemy = generateEnemy(state.currentEnemyIndex);
+  const completed = state.currentEnemyIndex - 1;
+  return <div className="main-screen">
+    <PageHeader eyebrow="THE PATH TO STRONGER" title={journeyOnly ? 'Your journey' : 'Welcome back, Player.'}
+      description="Every rep moves you forward. Your next challenge is waiting.">
+      <button className="button button-quiet" onClick={onStartWorkout}><Icon name="Activity" />Free training<Icon name="ArrowUpRight" /></button>
+    </PageHeader>
+    <div className="journey-layout">
+      <div className="journey-main">
+        <section className="next-encounter" aria-labelledby="next-title">
+          <div className="encounter-illustration" aria-hidden="true"><div className="target-ring"><Icon name={nextEnemy.isBoss ? 'Shield' : 'Crosshair'} /></div><span>ENCOUNTER {String(state.currentEnemyIndex).padStart(2, '0')}</span></div>
+          <div className="encounter-copy"><span className="badge badge-accent"><Icon name="Flag" />NEXT CHALLENGE</span><h2 id="next-title">{nextEnemy.isBoss ? 'The final encounter.' : 'Step into the arena.'}</h2><p>{nextEnemy.name}<span />{nextEnemy.maxHp} HP<span />+{nextEnemy.isBoss ? 200 : 50} XP</p>
+            <button className="button button-primary" onClick={onStartBattle}>Enter battle<Icon name="ArrowRight" /></button>
+          </div>
+        </section>
+        <section className="journey-panel" aria-labelledby="journey-title">
+          <div className="section-title"><div><p className="eyebrow">CAMPAIGN / TRAINING GROUNDS</p><h2 id="journey-title">The ascent</h2></div><span className="journey-completion"><strong>{String(completed).padStart(2, '0')}</strong> / 10 cleared</span></div>
+          <ProgressBar value={completed} max={10} label="Journey completed encounters" />
+          <div className="map-legend"><span><i className="legend-current" />Current</span><span><Icon name="Check" />Cleared</span><span><Icon name="Lock" />Locked</span></div>
+          <JourneyMap currentEnemyIndex={state.currentEnemyIndex} onStartBattle={onStartBattle} />
+        </section>
+      </div>
+      <aside className="journey-aside" aria-label="Player progression">
+        <PlayerStats player={state.player} />
+        <DailyQuest quest={state.dailyQuest} />
+        <section className="training-callout"><Icon name="Activity" /><p className="eyebrow">BUILD YOUR FOUNDATION</p><h3>Train before the fight.</h3><p>Correct reps earn XP and strengthen your next attack.</p><button className="text-button" onClick={onStartWorkout}>Go to training<Icon name="ArrowRight" /></button></section>
+      </aside>
     </div>
-  );
+  </div>;
 }

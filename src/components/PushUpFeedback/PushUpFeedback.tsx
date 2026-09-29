@@ -1,4 +1,5 @@
 import type { PushUpDetectionResult } from '../../exercise-engine/pushUpTypes';
+import { Icon } from '../UI/Icon';
 import '../ExerciseFeedback/ExerciseFeedback.css';
 import './PushUpFeedback.css';
 
@@ -8,7 +9,7 @@ export function PushUpFeedback({ result, onReset }: { result: PushUpDetectionRes
     <section className={`exercise-feedback push-up-feedback form-${result.formStatus}`} aria-labelledby="push-up-title">
       <header className="exercise-header">
         <div><p className="eyebrow">STRONG ATTACK · TRAINING</p><h2 id="push-up-title">PUSH-UP MODE</h2></div>
-        <button type="button" onClick={onReset}>СБРОСИТЬ СЧЁТЧИК</button>
+        <button type="button" onClick={onReset} aria-label="СБРОСИТЬ СЧЁТЧИК"><Icon name="RotateCcw" />RESET</button>
       </header>
       <div className="push-up-setup" lang="ru">
         <strong>SIDE VIEW REQUIRED</strong>
