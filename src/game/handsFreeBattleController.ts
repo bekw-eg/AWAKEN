@@ -2,7 +2,7 @@ import { SquatDetector } from '../exercise-engine/squatDetector';
 import { JumpingJackDetector } from '../exercise-engine/jumpingJackDetector';
 import { PushUpDetector } from '../exercise-engine/pushUpDetector';
 import type { PushUpFrame } from '../exercise-engine/pushUpTypes';
-import type { ExerciseEvent } from './types';
+import { calculateAttackDamage, type BattleAttack } from './exerciseDamage';
 import { RECOVERY, recoveryHealPercent, HANDS_FREE_ATTACKS, HANDS_FREE_CONFIG as C, type AttackType } from './handsFreeConfig';
 import { isClosedPose, isPushupReadyPose, isStandingPose, standingPoseFeedback, pushupReadyState, readyPoseTrackingReliable } from './handsFreePoses';
 import { FORM_DISPLAY_CONFIG, type FormFeedback } from '../exercise-engine/formFeedback';
@@ -11,12 +11,13 @@ import { resolvePoseFeedback } from './resolvePoseFeedback';
 export type BattlePhase = 'camera_setup' | 'battle_intro' | 'battle_fight' | 'selecting_attack' | 'attack_confirmed' |
   'waiting_for_neutral' | 'exercise_prepare' | 'exercise_announcement' | 'performing_attack' | 'resolving_attack' |
   'recovering' | 'resolving_recovery' | 'enemy_turn' | 'turn_prepare' | 'victory' | 'defeat';
-export type BattleCommand = { type: 'attack'; event: ExerciseEvent } | { type: 'enemy_attack' } | { type: 'recover'; useNumber: number };
+export type BattleCommand = { type: 'attack'; attack: BattleAttack } | { type: 'enemy_attack' } | { type: 'recover'; useNumber: number };
 export type BattleSnapshot = {
   recoveryAvailable: boolean; recoveryUsesLeft: number; recoveryCharges: number; recoveryPercent: number;
   recoveryHoldMs: number; recoveryHealedHp: number; recoveryFullHp: boolean; recoveryNeedsMovement: boolean;
   phase: BattlePhase; selectedAttack: AttackType | null; candidate: AttackType | null;
   selectionLocked: boolean; reps: number; countdown: number; pushupHoldMs: number;
+  accumulatedDamage: number; attackSecondsLeft: number;
   squatPhase: string; jumpingJackPhase: string; feedback: string | null; formError: boolean;
   tracking: boolean; go: boolean; neutralProgress: number;
   formFeedback: FormFeedback;
@@ -28,7 +29,7 @@ export type BattleSnapshot = {
  * Commands are returned once, on phase transitions, never from renders or repeated timers.
  */
 export class HandsFreeBattleController {
-  constructor(private readonly round = 1) {}
+  constructor(private readonly round = 1, private readonly enemyId = `enemy-${round}`) {}
   private recoveryUses = 0;
   private recoveryCharges = 0;
   private recoveryFullHp = true;
@@ -94,6 +95,8 @@ export class HandsFreeBattleController {
       recoveryNeedsMovement: !this.recoveryArmed,
       recoveryHoldMs: this.recoveryHoldMs, recoveryHealedHp: this.recoveryHealedHp,
       selectionLocked: this.phase !== 'selecting_attack', reps: this.reps,
+      accumulatedDamage: this.selected ? calculateAttackDamage({ exercise: HANDS_FREE_ATTACKS[this.selected].exercise, correctReps: this.reps }) : 0,
+      attackSecondsLeft: this.phase === 'performing_attack' ? Math.max(0, Math.ceil((C.attackDurationMs - (now - this.enteredAt)) / 1000)) : 0,
       countdown: this.phase === 'recovering' ? Math.max(1, Math.ceil((RECOVERY.holdDurationMs - this.recoveryHoldMs) / 1000)) :
         duration ? Math.max(0, Math.ceil((duration - (now - this.enteredAt)) / C.countdownStepMs)) : 0,
       pushupHoldMs: this.pushupHoldMs, squatPhase: this.squat.getResult().phase,
@@ -198,19 +201,24 @@ export class HandsFreeBattleController {
         }
         break;
       case 'performing_attack':
+        // The deadline is checked before processing a frame: a late/incomplete
+        // movement cannot leak into the finished set, even after a camera stall.
+        if (elapsed >= C.attackDurationMs && this.selected) {
+          const attack: BattleAttack = { id: crypto.randomUUID(), enemyId: this.enemyId,
+            exercise: HANDS_FREE_ATTACKS[this.selected].exercise, correctReps: this.reps };
+          this.enter('resolving_attack', now);
+          this.resetDetectors();
+          return [{ type: 'attack', attack }];
+        }
         if (fresh && this.tracking && this.selected) {
-          const attack = HANDS_FREE_ATTACKS[this.selected];
           const result = this.selected === 'basic' ? this.squat.update(frame) : this.selected === 'fast' ? this.jack.update(frame) : this.pushup.update(frame);
           this.feedback = result.feedback;
           this.formError = result.formStatus === 'error';
           this.feedbackReliable = result.trackingStatus === 'ready';
           if (result.repJustCounted && !this.formError) {
-            this.reps++;
-            if (this.reps >= attack.reps) {
-              this.enter('resolving_attack', now);
-              this.resetDetectors();
-              return [{ type: 'attack', event: { exercise: attack.exercise, status: 'correct', timestamp: now } }];
-            }
+            // Read the detector's cumulative identity, never increment from a
+            // render or repeated event. pause() retains this count across gaps.
+            this.reps = Math.max(this.reps, result.repCount);
           }
         }
         break;

@@ -41,6 +41,9 @@ const frame = (pose: Omit<PushUpFrame, 'timestampMs'>) => {
   act(() => poseSink?.({ ...pose, timestampMs: performance.now() }));
 };
 const hold = (pose: Omit<PushUpFrame, 'timestampMs'>, ms: number) => { for (let t = 0; t < ms; t += 50) frame(pose); };
+const finish = () => {
+  for (let n = 0; n < 601 && phase() === 'performing_attack'; n++) act(() => vi.advanceTimersByTime(50));
+};
 const jack = () => { hold(closedFrame, 300); hold(openFrame, 400); hold(closedFrame, 400); };
 const squat = () => { const s = new SquatSequence(); s.rep(); s.frames.forEach(frame); };
 const pushup = () => { const s = new PushUpSequence(); s.rep(); s.frames.forEach(frame); };
@@ -49,7 +52,7 @@ const prepare = (pose: Omit<PushUpFrame, 'timestampMs'>) => {
   expect(phase()).toBe('performing_attack');
 };
 
-it.each(['basic', 'fast', 'strong'])('selects %s with the body and sends a single set completion to the existing damage calculation', attack => {
+it.each(['basic', 'fast', 'strong'])('selects %s with the body and sends a single set completion to the rep-based damage calculation', attack => {
   start(); hold(squatFrame(0), 4800);
   expect(screen.getByRole('heading', { name: 'SELECT YOUR ATTACK' })).toBeTruthy();
   expect(screen.queryByRole('button', { name: /attack/i })).toBeNull();
@@ -59,14 +62,17 @@ it.each(['basic', 'fast', 'strong'])('selects %s with the body and sends a singl
   expect(screen.getByRole('heading', { name: `${attack.toUpperCase()} ATTACK SELECTED` })).toBeTruthy();
   expect(hp('Enemy 1')).toBe(60); expect(hp('Player')).toBe(100);
   prepare(attack === 'basic' ? squatFrame(0) : attack === 'fast' ? closedFrame : pushUpFrame(0));
-  expect(screen.getByLabelText('Attack repetitions').textContent).toBe(`0 / ${attack === 'fast' ? 5 : 1}`);
+  expect(screen.getByLabelText('Attack repetitions').textContent).toBe('0');
   if (attack === 'basic') squat();
   else if (attack === 'strong') pushup();
   else {
     for (let n = 0; n < 4; n++) jack();
     expect(hp('Enemy 1')).toBe(60); jack();
   }
-  expect(hp('Enemy 1')).toBe(attack === 'basic' ? 38 : attack === 'fast' ? 49 : 16);
+  expect(hp('Enemy 1')).toBe(60);
+  expect(screen.getByLabelText('Accumulated damage').textContent).toBe(attack === 'basic' ? '5' : '10');
+  finish();
+  expect(hp('Enemy 1')).toBe(attack === 'basic' ? 55 : 50);
   expect(hp('Player')).toBe(100);
   act(() => vi.advanceTimersByTime(1500));
   expect(hp('Player')).toBe(96); expect(screen.getByRole('heading', { name: 'ENEMY TURN' })).toBeTruthy();
@@ -78,10 +84,12 @@ it.each(['basic', 'fast', 'strong'])('selects %s with the body and sends a singl
 
 it('shows round complete, waits five seconds, and starts exactly one next opponent without a final strike', () => {
   start(); hold(closedFrame, 3200);
-  hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup();
+  hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup(); finish();
   act(() => vi.advanceTimersByTime(4500));
   expect(hp('Player')).toBe(96);
-  hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup();
+  hold(pushUpFrame(0), 800); prepare(pushUpFrame(0));
+  for (let n = 0; n < 5; n++) pushup();
+  finish();
   expect(hp('Enemy 1')).toBe(0);
   expect(screen.queryByRole('button', { name: 'SKIP' })).toBeNull();
   act(() => vi.advanceTimersByTime(600));
@@ -97,10 +105,10 @@ it('shows round complete, waits five seconds, and starts exactly one next oppone
 });
 
 it('SKIP exits the completed round to the main menu and saves the next encounter', () => {
-  const initial = progression.createGameState();
-  vi.spyOn(progression, 'createGameState').mockImplementation(() => ({ ...initial, player: { ...initial.player, strength: 300 } }));
   start(); hold(closedFrame, 3200);
-  hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup();
+  hold(pushUpFrame(0), 800); prepare(pushUpFrame(0));
+  for (let n = 0; n < 6; n++) pushup();
+  finish();
   act(() => vi.advanceTimersByTime(600));
   fireEvent.click(screen.getByRole('button', { name: 'SKIP' }));
   expect(screen.getByRole('heading', { name: 'Welcome back, Player.' })).toBeTruthy();
@@ -123,14 +131,21 @@ it('does not attack during setup and cleans up all battle timers on navigation',
 
 it('completes all encounters with hands-free attacks and waits for boss death before awarding the result', () => {
   const initial = progression.createGameState();
-  // A trained player can finish each encounter in one strong attack.
-  vi.spyOn(progression, 'createGameState').mockImplementation(() => ({ ...initial, player: { ...initial.player, strength: 300 } }));
+  // Extra defense keeps this campaign traversal focused on victory transitions.
+  vi.spyOn(progression, 'createGameState').mockImplementation(() => ({ ...initial, player: { ...initial.player, defense: 100 } }));
   render(<StrictMode><Dashboard /></StrictMode>);
   fireEvent.click(screen.getByRole('button', { name: 'Enter battle' }));
   for (let encounter = 1; encounter <= 10; encounter++) {
     hold(closedFrame, 3200);
-    hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup();
     const boss = encounter === 10;
+    const enemyName = boss ? 'BOSS 1' : `Enemy ${encounter}`;
+    while (hp(enemyName) > 0) {
+      hold(pushUpFrame(0), 800); prepare(pushUpFrame(0));
+      const reps = Math.min(10, Math.ceil(hp(enemyName) / 10));
+      for (let n = 0; n < reps; n++) pushup();
+      finish();
+      if (hp(enemyName) > 0) act(() => vi.advanceTimersByTime(4500));
+    }
     expect(hp(boss ? 'BOSS 1' : `Enemy ${encounter}`)).toBe(0);
     if (boss) {
       expect(document.querySelector('.boss-scene')?.getAttribute('data-state')).toBe('death');
@@ -155,7 +170,7 @@ it('completes all encounters with hands-free attacks and waits for boss death be
     expect(screen.getByRole('list', { name: 'Campaign encounters' }).querySelector('[aria-current="step"]')?.textContent)
       .toContain(boss ? 'Enemy 1' : encounter === 9 ? 'BOSS 1' : `Enemy ${encounter + 1}`);
   }
-}, 20000);
+}, 60000);
 
 it('keeps the player turn after recovery and requires fresh movement to heal again before attacking the boss', () => {
   const initial = progression.createGameState();
@@ -174,7 +189,7 @@ it('keeps the player turn after recovery and requires fresh movement to heal aga
   expect(screen.getByTestId('battle-overlay').textContent).toContain('50% MAX HP');
   expect(screen.getByTestId('battle-overlay').textContent).toContain('YOUR TURN');
   act(() => vi.advanceTimersByTime(1500));
-  expect(hp('Player')).toBe(74); expect(hp('BOSS 1')).toBe(600);
+  expect(hp('Player')).toBe(74); expect(hp('BOSS 1')).toBe(300);
   expect(document.querySelector('.boss-scene')?.getAttribute('data-state')).toBe('idle');
   act(() => vi.advanceTimersByTime(2700));
   expect(screen.getByText('2 / 3 CHARGES · 1 / 2 USES LEFT THIS FIGHT')).toBeTruthy();
@@ -194,8 +209,8 @@ it('keeps the player turn after recovery and requires fresh movement to heal aga
   expect(screen.getByText('1 / 3 CHARGES · 0 / 2 USES LEFT THIS FIGHT')).toBeTruthy();
   hold(squatFrame(0), 6000);
   expect(hp('Player')).toBe(100);
-  hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup();
-  expect(hp('Player')).toBe(100); expect(hp('BOSS 1')).toBe(556);
+  hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup(); finish();
+  expect(hp('Player')).toBe(100); expect(hp('BOSS 1')).toBe(290);
   act(() => vi.advanceTimersByTime(1500));
   expect(hp('Player')).toBe(71);
   expect(phase()).toBe('enemy_turn');
@@ -227,8 +242,8 @@ it('cancels the countdown on movement, heals only missing HP in round one and ex
   expect(screen.getByText('NO CHARGES · EARN IN TRAINING')).toBeTruthy();
   hold(squatFrame(0), 6000);
   expect(hp('Player')).toBe(100);
-  hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup();
-  expect(hp('Player')).toBe(100); expect(hp('Enemy 1')).toBe(16);
+  hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup(); finish();
+  expect(hp('Player')).toBe(100); expect(hp('Enemy 1')).toBe(50);
   act(() => vi.advanceTimersByTime(1500));
   expect(hp('Player')).toBe(96);
 });

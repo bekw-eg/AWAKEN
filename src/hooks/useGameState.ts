@@ -2,6 +2,7 @@ import { useCallback, useEffect, useReducer, useState } from 'react';
 import { gameReducer } from '../game/progression';
 import { loadProgress, saveProgress } from '../game/progressStorage';
 import type { ExerciseEvent, GameState } from '../game/types';
+import type { BattleAttack } from '../game/exerciseDamage';
 
 export function useGameState() {
   const [state, dispatch] = useReducer(gameReducer, undefined, loadProgress);
@@ -15,6 +16,7 @@ export function useGameState() {
   }, [player, exercises, savedEnemyIndex, dailyQuest, recoveryCharges, recoveryTraining]);
   
   const handleExerciseEvent = useCallback((event: ExerciseEvent) => dispatch({ type: 'exercise', event }), []);
+  const handleBattleAttack = useCallback((attack: BattleAttack) => dispatch({ type: 'battle_attack', attack }), []);
   const resetGame = useCallback(() => dispatch({ type: 'reset' }), []);
   const setScreen = useCallback((screen: GameState['screen']) => dispatch({ type: 'set_screen', screen }), []);
   const startBattle = useCallback(() => dispatch({ type: 'start_battle' }), []);
@@ -23,5 +25,5 @@ export function useGameState() {
   const completeRoundDeath = useCallback((enemyId: string) => dispatch({ type: 'round_death_complete', enemyId }), []);
   const startNextRound = useCallback((enemyId: string) => dispatch({ type: 'next_round', enemyId }), []);
 
-  return { ...state, storageError, handleExerciseEvent, resetGame, setScreen, startBattle, enemyAttack, recover, completeRoundDeath, startNextRound };
+  return { ...state, storageError, handleExerciseEvent, handleBattleAttack, resetGame, setScreen, startBattle, enemyAttack, recover, completeRoundDeath, startNextRound };
 }

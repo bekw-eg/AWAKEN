@@ -1,3 +1,4 @@
+import type { BattleAttack } from '../game/exerciseDamage';
 import { StrictMode, useCallback, useReducer } from 'react';
 import { act, cleanup, render, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -7,7 +8,7 @@ import { useHandsFreeBattle } from '../hooks/useHandsFreeBattle';
 import { HANDS_FREE_CONFIG as C } from '../game/handsFreeConfig';
 import { createGameState, gameReducer, generateEnemy } from '../game/progression';
 import { MotionProvider } from '../motion/Motion';
-import type { ExerciseEvent, GameState } from '../game/types';
+import type { GameState } from '../game/types';
 import type { PushUpFrame } from '../exercise-engine/pushUpTypes';
 import { closedFrame } from './fixtures/jumpingJackFrames';
 import { PushUpSequence, pushUpFrame } from './fixtures/pushUpFrames';
@@ -19,10 +20,10 @@ const bossState = (): GameState => ({ ...createGameState(), screen: 'battle', cu
 function useBattle() {
   const [game, dispatch] = useReducer(gameReducer, undefined, bossState);
   const strike = useCallback(() => dispatch({ type: 'enemy_attack' }), []);
-  const exercise = useCallback((event: ExerciseEvent) => dispatch({ type: 'exercise', event }), []);
+  const exercise = useCallback((attack: BattleAttack) => dispatch({ type: 'battle_attack', attack }), []);
   const terminal = game.screen !== 'battle';
   const battle = useHandsFreeBattle({ playerHp: game.player.hp, enemyHp: game.currentEnemy?.hp ?? 0,
-    terminal, onEnemyAttack: strike, onExerciseEvent: exercise });
+    terminal, enemyId: game.currentEnemy?.id, round: 10, onEnemyAttack: strike, onBattleAttack: exercise });
   const animation = useBossAnimation(game.currentEnemy, battle.snapshot.phase, terminal);
   return { game, animation, ...battle };
 }
@@ -47,16 +48,18 @@ it('uses real hands-free turns for normal and heavy boss impacts, with no indepe
       frame(pose);
       if (result.current.snapshot.phase === 'resolving_attack') break;
     }
+    while (result.current.snapshot.phase === 'performing_attack') advance(C.uiTickMs);
+    expect(result.current.game.currentEnemy?.hp).toBe(300 - (turn + 1) * 10);
     expect(result.current.snapshot.phase).toBe('resolving_attack');
     expect(result.current.animation.state).toBe('hurt');
     const hpBefore = turn === 0 ? 100 : 71;
     expect(result.current.game.player.hp).toBe(hpBefore);
     advance(C.resolveMs - BOSS_IMPACT[state]);
     expect(result.current.animation.state).toBe(state);
-    advance(BOSS_IMPACT[state] - 1);
+    advance(BOSS_IMPACT[state] - C.uiTickMs - 1);
     expect(result.current.game.player.hp).toBe(hpBefore);
     // Real pose frames need not align to the controller's 50 ms UI tick.
-    advance(1 + C.uiTickMs);
+    advance(1 + 2 * C.uiTickMs);
     expect(result.current.game.player.hp).toBe(hpBefore - 29);
     expect(result.current.snapshot.phase).toBe('enemy_turn');
     advance(BOSS_TIMING[state] - BOSS_IMPACT[state] - C.uiTickMs);
@@ -73,10 +76,10 @@ it('uses real hands-free turns for normal and heavy boss impacts, with no indepe
 it('restarts hurt on consecutive hits and cancels the earlier recovery', () => {
   const enemy = generateEnemy(10);
   const { result, rerender } = renderHook(({ current }) => useBossAnimation(current, 'performing_attack', false), { initialProps: { current: enemy } });
-  rerender({ current: { ...enemy, hp: 570 } });
+  rerender({ current: { ...enemy, hp: 270 } });
   const id = result.current.id;
   advance(200);
-  rerender({ current: { ...enemy, hp: 540 } });
+  rerender({ current: { ...enemy, hp: 240 } });
   expect(result.current.id).toBeGreaterThan(id);
   advance(160);
   expect(result.current.state).toBe('hurt');

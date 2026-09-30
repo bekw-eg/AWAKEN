@@ -1,3 +1,4 @@
+import { EXERCISE_DAMAGE } from '../../game/exerciseDamage';
 import type { ExerciseType, PlayerState } from '../../game/types';
 import { Icon, type IconName } from '../UI/Icon';
 
@@ -12,7 +13,7 @@ export function AttackSelector({ selected, onSelect, player, performing, complet
   performing: boolean; completed: boolean; disabled?: boolean; eventId?: number;
 }) {
   return <section className="attack-selection" aria-labelledby="attack-title">
-    <div className="section-title"><h2 id="attack-title">Choose your attack</h2><span>One correct rep. One hit.</span></div>
+    <div className="section-title"><h2 id="attack-title">Choose your attack</h2><span>Every correct rep adds damage.</span></div>
     <div className="attack-cards" role="group" aria-label="Attack selection">
       {ATTACKS.map((attack, index) => {
         const isSelected = selected === attack.exercise;
@@ -22,7 +23,7 @@ export function AttackSelector({ selected, onSelect, player, performing, complet
           <span className="attack-card-top"><Icon name={attack.icon} /><span>{isSelected ? <Icon name="CheckCircle" /> : `0${index + 1}`}</span></span>
           <span className="attack-label">{attack.label}</span><strong className="attack-name">{attack.title}</strong>
           <span className="attack-detail">{attack.description}<span>{attack.shortStat} {player[attack.stat]}</span></span>
-          <span key={isSelected ? eventId : 'idle'} className="attack-card-footer"><span>{state === 'completed' ? 'EXERCISE COMPLETE · HIT CONFIRMED' : state === 'performing' ? 'PERFORMING' : isSelected ? 'SELECTED · 1 REP / HIT' : '1 CORRECT REP / HIT'}</span><Icon name={state === 'completed' ? 'Check' : 'ArrowRight'} /></span>
+          <span key={isSelected ? eventId : 'idle'} className="attack-card-footer"><span>{state === 'completed' ? 'EXERCISE COMPLETE · HIT CONFIRMED' : state === 'performing' ? 'PERFORMING' : `${isSelected ? 'SELECTED · ' : ''}${EXERCISE_DAMAGE[attack.exercise]} DMG / REP`}</span><Icon name={state === 'completed' ? 'Check' : 'ArrowRight'} /></span>
         </button>;
       })}
     </div>

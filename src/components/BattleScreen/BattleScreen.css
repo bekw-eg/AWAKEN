@@ -5,6 +5,37 @@
 .battle-header .eyebrow { font-size: 8px; margin: 0 0 6px; }
 .battle-header h1 { font-size: 26px; letter-spacing: -.7px; }
 .battle-header > .text-button { min-width: 100px; }
+.battle-stage { display: grid; grid-template-columns: 96px minmax(0, 1fr); column-gap: 20px; }
+.battle-stage > .combatants { grid-column: 2; grid-row: 1; }
+.battle-stage > .boss-arena { grid-column: 2; grid-row: 2; }
+.battle-stage > .camera-system { grid-column: 2; grid-row: 2; }
+.battle-stage-boss > .camera-system { grid-row: 3; }
+.battle-timer-slot { grid-column: 1; grid-row: 2; align-self: start; padding-top: 64px; }
+.battle-stage-boss > .battle-timer-slot { align-self: center; padding-top: 0; padding-bottom: 24px; }
+.set-countdown { color: var(--accent); text-align: center; font-variant-numeric: tabular-nums; }
+.set-countdown-label, .set-countdown-unit { display: block; font-size: 9px; font-weight: 500; letter-spacing: 1.5px; color: var(--text-muted); }
+.set-countdown-window { position: relative; height: 1.25em; overflow: hidden; font-size: 76px; font-weight: 750; line-height: 1.25; letter-spacing: -4px; }
+.set-countdown-digit { display: block; position: absolute; inset: 0; }
+.set-countdown-incoming { animation: set-second-enter 340ms cubic-bezier(.4, 0, .2, 1) both; }
+.set-countdown-outgoing { animation: set-second-exit 340ms cubic-bezier(.4, 0, .2, 1) both; }
+@keyframes set-second-enter { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes set-second-exit { from { transform: translateY(0); opacity: 1; } to { transform: translateY(100%); opacity: 0; } }
+.set-countdown-reduced .set-countdown-digit, .reduce-motion .set-countdown-digit { animation: none; }
+.set-countdown-reduced .set-countdown-outgoing, .reduce-motion .set-countdown-outgoing { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .set-countdown-digit { animation: none; }
+  .set-countdown-outgoing { display: none; }
+}
+@media (max-width: 1150px) {
+  .battle-stage { grid-template-columns: 80px minmax(0, 1fr); column-gap: 16px; }
+  .set-countdown-window { font-size: 64px; letter-spacing: -3px; }
+}
+@media (max-width: 1000px) {
+  .battle-stage { display: flex; flex-direction: column; }
+  .battle-timer-slot, .battle-stage-boss > .battle-timer-slot { align-self: stretch; padding: 0; }
+  .set-countdown { display: flex; justify-content: center; align-items: center; gap: 16px; margin: -8px 0 20px; }
+  .set-countdown-window { width: 2ch; flex-shrink: 0; }
+}
 .combatants { display: grid; grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr); align-items: center; margin-bottom: 28px; }
 .fighter-status { padding: 16px 22px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); min-width: 0; }
 .fighter-meta { display: flex; justify-content: space-between; gap: 12px; color: var(--text-muted); font-size: 8px; letter-spacing: 1px; }
@@ -103,6 +134,25 @@
 .hands-free-status h2 { font-size: clamp(20px, 2vw, 30px); margin: 12px 0; line-height: 1.2; }
 .hands-free-status p { color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
 .hands-free-countdown { display: block; color: var(--accent); font-size: 64px; font-variant-numeric: tabular-nums; text-align: center; margin: 20px 0; }
+.attack-progress { margin: 20px 0; text-align: center; font-variant-numeric: tabular-nums; }
+.attack-totals { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.attack-totals strong { display: block; font-size: clamp(32px, 4vw, 52px); color: var(--accent); }
+.attack-totals span { color: var(--text-muted); font-size: 10px; letter-spacing: 1px; }
+.damage-total { animation: rep-damage-pulse 240ms ease-out; }
+.rep-damage-feedback { height: 22px; margin-top: 8px; color: var(--accent); font-size: 12px; }
+.rep-damage-feedback span { display: inline-block; animation: rep-damage-gain 700ms ease-out forwards; }
+.hands-free-status .attack-time { font-size: 10px; color: var(--text-muted); }
+[data-attack-phase="resolving_attack"]:not([data-attack-damage="0"]) .fighter-status:not(.fighter-enemy) { animation: player-set-attack 300ms ease-out; }
+@keyframes rep-damage-pulse { from { transform: scale(1.05); } to { transform: scale(1); } }
+@keyframes rep-damage-gain { 0% { opacity: 0; transform: translateY(3px); } 20%, 65% { opacity: 1; } 100% { opacity: 0; transform: translateY(-4px); } }
+@keyframes player-set-attack { 0%, 100% { transform: translateX(0); } 40% { transform: translateX(8px); border-color: var(--accent); } }
+.reduce-motion .damage-total, .reduce-motion .rep-damage-feedback span,
+.reduce-motion [data-attack-phase="resolving_attack"] .fighter-status { animation: none; }
+.reduce-motion .rep-damage-feedback { visibility: hidden; }
+@media (prefers-reduced-motion: reduce) {
+  .damage-total, .rep-damage-feedback span, [data-attack-phase="resolving_attack"] .fighter-status { animation: none; }
+  .rep-damage-feedback { visibility: hidden; }
+}
 .gesture-choices { display: grid; gap: 10px; margin-top: 20px; }
 .gesture-choice { display: grid; gap: 6px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
 .gesture-choice.detecting { border-color: var(--accent); background: var(--accent-soft); }
