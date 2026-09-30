@@ -40,7 +40,7 @@ export function HandsFreeStatus({ battle, debug = false }: {
       <div className="rep-damage-feedback" aria-hidden="true">
         {phase === 'performing_attack' && battle.reps > 0 && <span key={battle.reps}>+{EXERCISE_DAMAGE[attack.exercise]} DMG</span>}
       </div>
-      {phase === 'performing_attack' && <p className="attack-time" aria-label="Set time remaining">{battle.attackSecondsLeft} SEC LEFT · AUTO ATTACK AT 0</p>}
+      {phase === 'performing_attack' && <p className="attack-time">AUTO ATTACK AT 0</p>}
     </div>}
     {phase === 'selecting_attack' && <div className="gesture-choices" aria-label="Attack gestures">
       {(Object.keys(HANDS_FREE_ATTACKS) as AttackType[]).map(key => <div key={key} className={`gesture-choice${battle.candidate === key ? ' detecting' : ''}`}>
