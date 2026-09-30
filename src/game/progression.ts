@@ -17,11 +17,12 @@ export const EXERCISES = [
 export function generateEnemy(index: number): Enemy {
   const isBoss = index === 10;
   const multiplier = 1 + (index * 0.2);
+  const maxHp = isBoss ? 300 : Math.floor(50 * multiplier);
   return {
     id: `enemy-${index}`,
     name: isBoss ? `BOSS ${Math.floor(index/10)}` : `Enemy ${index}`,
-    hp: Math.floor((isBoss ? 200 : 50) * multiplier),
-    maxHp: Math.floor((isBoss ? 200 : 50) * multiplier),
+    hp: maxHp,
+    maxHp,
     attack: Math.floor((isBoss ? 15 * 0.7 : 5) * multiplier),
     defense: Math.floor((isBoss ? 10 : 2) * multiplier),
     isBoss

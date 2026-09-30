@@ -49,7 +49,7 @@ it('uses real hands-free turns for normal and heavy boss impacts, with no indepe
       if (result.current.snapshot.phase === 'resolving_attack') break;
     }
     while (result.current.snapshot.phase === 'performing_attack') advance(C.uiTickMs);
-    expect(result.current.game.currentEnemy?.hp).toBe(600 - (turn + 1) * 10);
+    expect(result.current.game.currentEnemy?.hp).toBe(300 - (turn + 1) * 10);
     expect(result.current.snapshot.phase).toBe('resolving_attack');
     expect(result.current.animation.state).toBe('hurt');
     const hpBefore = turn === 0 ? 100 : 71;
@@ -76,10 +76,10 @@ it('uses real hands-free turns for normal and heavy boss impacts, with no indepe
 it('restarts hurt on consecutive hits and cancels the earlier recovery', () => {
   const enemy = generateEnemy(10);
   const { result, rerender } = renderHook(({ current }) => useBossAnimation(current, 'performing_attack', false), { initialProps: { current: enemy } });
-  rerender({ current: { ...enemy, hp: 570 } });
+  rerender({ current: { ...enemy, hp: 270 } });
   const id = result.current.id;
   advance(200);
-  rerender({ current: { ...enemy, hp: 540 } });
+  rerender({ current: { ...enemy, hp: 240 } });
   expect(result.current.id).toBeGreaterThan(id);
   advance(160);
   expect(result.current.state).toBe('hurt');

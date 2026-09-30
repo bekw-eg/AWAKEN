@@ -14,14 +14,14 @@ describe('rep-based combat damage', () => {
     const attack: BattleAttack = { id: 'set-1', enemyId: 'enemy-10', exercise, correctReps };
     expect(calculateAttackDamage(attack)).toBe(damage);
     const next = applyBattleAttack(state, attack);
-    expect(next.currentEnemy?.hp).toBe(600 - damage);
+    expect(next.currentEnemy?.hp).toBe(300 - damage);
     expect(next.player).toEqual(state.player);
     // A duplicate set cannot apply its reps, damage or exercise XP again.
     expect(applyBattleAttack(next, attack)).toBe(next);
     if (!correctReps) expect(next.exercises).toEqual(state.exercises);
     const trained = { ...state, player: { ...state.player, strength: 300, agility: 300, power: 300 },
       exercises: { ...state.exercises, [exercise]: { level: 50, xp: 0, xpToNextLevel: 1000 } } };
-    expect(applyBattleAttack(trained, attack).currentEnemy?.hp).toBe(600 - damage);
+    expect(applyBattleAttack(trained, attack).currentEnemy?.hp).toBe(300 - damage);
   });
 
   it('keeps the heavier exercise more powerful for the same number of reps', () => {

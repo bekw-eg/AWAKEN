@@ -189,7 +189,7 @@ it('keeps the player turn after recovery and requires fresh movement to heal aga
   expect(screen.getByTestId('battle-overlay').textContent).toContain('50% MAX HP');
   expect(screen.getByTestId('battle-overlay').textContent).toContain('YOUR TURN');
   act(() => vi.advanceTimersByTime(1500));
-  expect(hp('Player')).toBe(74); expect(hp('BOSS 1')).toBe(600);
+  expect(hp('Player')).toBe(74); expect(hp('BOSS 1')).toBe(300);
   expect(document.querySelector('.boss-scene')?.getAttribute('data-state')).toBe('idle');
   act(() => vi.advanceTimersByTime(2700));
   expect(screen.getByText('2 / 3 CHARGES · 1 / 2 USES LEFT THIS FIGHT')).toBeTruthy();
@@ -210,7 +210,7 @@ it('keeps the player turn after recovery and requires fresh movement to heal aga
   hold(squatFrame(0), 6000);
   expect(hp('Player')).toBe(100);
   hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup(); finish();
-  expect(hp('Player')).toBe(100); expect(hp('BOSS 1')).toBe(590);
+  expect(hp('Player')).toBe(100); expect(hp('BOSS 1')).toBe(290);
   act(() => vi.advanceTimersByTime(1500));
   expect(hp('Player')).toBe(71);
   expect(phase()).toBe('enemy_turn');
