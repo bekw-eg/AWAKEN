@@ -5,9 +5,7 @@ import type { ExerciseEvent, ExerciseType } from '../game/types';
 import type { CameraTelemetry } from '../components/Camera/CameraView';
 import type { PushUpFrame } from '../exercise-engine/pushUpTypes';
 import { Dashboard } from '../pages/Dashboard/Dashboard';
-import { SquatSequence, squatFrame } from './fixtures/squatFrames';
-import { PushUpSequence, pushUpFrame } from './fixtures/pushUpFrames';
-import { closedFrame, openFrame } from './fixtures/jumpingJackFrames';
+import { BOSS_TIMING } from '../components/Boss/BossCharacter';
 
 // Feed real pose sequences at the camera boundary. Controller, detectors, game
 // reducer, dashboard terminal presentation, and StrictMode lifecycle stay real.
@@ -93,6 +91,37 @@ it('does not attack during setup and cleans up all battle timers on navigation',
   fireEvent.click(screen.getAllByRole('button', { name: 'Journey' }).at(-1)!);
   act(() => vi.advanceTimersByTime(1000)); expect(vi.getTimerCount()).toBe(0);
 });
+
+it('completes all nine enemies and the boss, shows rewards, and returns to the existing next cycle', () => {
+  render(<StrictMode><Dashboard /></StrictMode>);
+  for (let encounter = 1; encounter <= 10; encounter++) {
+    fireEvent.click(screen.getByRole('button', { name: 'Enter battle' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Push-up: Strong attack' }));
+    for (let count = 0; count < 30 && !document.querySelector('.terminal-battle'); count++) rep();
+    expect(hp(encounter === 10 ? 'BOSS 1' : 'Enemy ' + encounter)).toBe(0);
+    expect(screen.queryByRole('heading', { name: encounter === 10 ? 'Boss defeated.' : 'Victory.' })).toBeNull();
+    if (encounter === 10) {
+      expect(document.querySelector('.boss-scene')?.getAttribute('data-state')).toBe('death');
+      const mastery = screen.getByRole('progressbar', { name: 'BOSS 1 HP' }).getAttribute('aria-valuenow');
+      rep(); // The mounted terminal camera must not deliver another attack.
+      expect(screen.getByRole('progressbar', { name: 'BOSS 1 HP' }).getAttribute('aria-valuenow')).toBe(mastery);
+      act(() => vi.advanceTimersByTime(BOSS_TIMING.death - 1));
+      expect(screen.queryByRole('heading', { name: 'Boss defeated.' })).toBeNull();
+      act(() => vi.advanceTimersByTime(1));
+    } else {
+      act(() => vi.advanceTimersByTime(760));
+    }
+    expect(screen.getByRole('heading', { name: encounter === 10 ? 'Boss defeated.' : 'Victory.' })).toBeTruthy();
+    act(() => vi.advanceTimersByTime(1800));
+    expect(document.querySelector('.result-reward strong')?.textContent).toBe(encounter === 10 ? '+200' : '+50');
+    act(() => vi.advanceTimersByTime(40)); // Paint the new level's progress track.
+    expect(vi.getTimerCount()).toBe(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Continue journey' }));
+    const map = screen.getByRole('list', { name: 'Campaign encounters' });
+    expect(within(map).getAllByRole('listitem')).toHaveLength(10);
+    expect(map.querySelector('[aria-current="step"]')?.textContent).toContain(encounter === 10 ? 'Enemy 1' : encounter === 9 ? 'BOSS 1' : `Enemy ${encounter + 1}`);
+  }
+}, 15000); // Ten full UI encounters under StrictMode also run reliably on slower hosts.
 
 it('navigates every page while retaining game progress and applying camera preferences', () => {
   render(<Dashboard />);
