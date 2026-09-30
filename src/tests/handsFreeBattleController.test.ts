@@ -116,19 +116,44 @@ describe('hands-free recovery turns', () => {
     expect(s.commands).toEqual([]); expect(s.health.recoveryCharges).toBe(3);
   });
 
-  it('allows two consecutive recovery turns without cooldown, but never a third', () => {
+  it('requires fresh movement to repeat recovery without cooldown, but never permits a third', () => {
     const s = ready();
     for (const useNumber of [1, 2]) {
       s.hold(squatFrame(0), RECOVERY.holdDurationMs);
       expect(s.commands.at(-1)).toEqual({ type: 'recover', useNumber });
       s.hold(squatFrame(0), C.resolveMs + C.enemyTurnMs + C.betweenTurnsMs);
       s.frame(squatFrame(0));
+      if (useNumber === 1) {
+        s.hold(squatFrame(0), 6000);
+        expect(s.state.phase).toBe('selecting_attack');
+        expect(s.health.recoveryCharges).toBe(2);
+        s.frame({ landmarks: null, worldLandmarks: null });
+        s.hold(squatFrame(0), 6000);
+        expect(s.state.phase).toBe('selecting_attack');
+        const movement = squatFrame(0);
+        movement.landmarks = movement.landmarks!.map((point, id) => [15, 16].includes(id) ? { ...point, y: .1 } : point);
+        s.frame(movement); s.frame(squatFrame(0));
+        expect(s.state.phase).toBe('recovering');
+      }
     }
     expect(s.state.phase).toBe('selecting_attack');
     expect(s.health.recoveryCharges).toBe(1);
     expect(s.state.recoveryUsesLeft).toBe(0);
     s.hold(squatFrame(0), 6000);
     expect(s.commands.filter(command => command.type === 'recover')).toHaveLength(2);
+  });
+
+  it('recognizes a step while remaining upright to rearm the next recovery', () => {
+    const s = ready();
+    s.hold(squatFrame(0), RECOVERY.holdDurationMs);
+    s.hold(squatFrame(0), C.resolveMs + C.enemyTurnMs + C.betweenTurnsMs);
+    s.frame(squatFrame(0));
+    expect(s.state.recoveryNeedsMovement).toBe(true);
+    const moved = squatFrame(0);
+    moved.landmarks = moved.landmarks!.map(point => ({ ...point, x: point.x + .06 }));
+    s.frame(moved);
+    expect(s.state.phase).toBe('recovering');
+    expect(s.health.recoveryCharges).toBe(2);
   });
 
   it.each(['playerHp', 'enemyHp'] as const)('stops pending recovery when %s reaches zero', key => {

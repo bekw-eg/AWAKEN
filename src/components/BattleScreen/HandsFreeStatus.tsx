@@ -42,7 +42,7 @@ export function HandsFreeStatus({ battle, debug = false }: {
       <div className="gesture-choice recovery-choice" aria-label="Recovery" aria-disabled={!battle.recoveryAvailable}>
         <strong>RECOVER — Hold</strong>
         <span>{battle.recoveryUsesLeft === 0 ? 'FIGHT LIMIT REACHED' : battle.recoveryCharges === 0 ? 'NO CHARGES · EARN IN TRAINING' :
-          battle.recoveryFullHp ? 'HP FULL · CHARGES SAVED' : `STAND STILL 5 SEC · +${battle.recoveryPercent}% MAX HP`}</span>
+          battle.recoveryFullHp ? 'HP FULL · CHARGES SAVED' : battle.recoveryNeedsMovement ? 'MOVE, THEN STAND STILL TO RECOVER AGAIN' : `STAND STILL 5 SEC · +${battle.recoveryPercent}% MAX HP`}</span>
         <small>{battle.recoveryCharges} / {RECOVERY.maxCharges} CHARGES · {battle.recoveryUsesLeft} / {RECOVERY.maxUsesPerFight} USES LEFT THIS FIGHT</small>
       </div>
     </div>}

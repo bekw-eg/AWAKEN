@@ -49,7 +49,7 @@ it('uses real hands-free turns for normal and heavy boss impacts, with no indepe
     }
     expect(result.current.snapshot.phase).toBe('resolving_attack');
     expect(result.current.animation.state).toBe('hurt');
-    const hpBefore = turn === 0 ? 100 : 57;
+    const hpBefore = turn === 0 ? 100 : 71;
     expect(result.current.game.player.hp).toBe(hpBefore);
     advance(C.resolveMs - BOSS_IMPACT[state]);
     expect(result.current.animation.state).toBe(state);
@@ -57,14 +57,14 @@ it('uses real hands-free turns for normal and heavy boss impacts, with no indepe
     expect(result.current.game.player.hp).toBe(hpBefore);
     // Real pose frames need not align to the controller's 50 ms UI tick.
     advance(1 + C.uiTickMs);
-    expect(result.current.game.player.hp).toBe(hpBefore - 43);
+    expect(result.current.game.player.hp).toBe(hpBefore - 29);
     expect(result.current.snapshot.phase).toBe('enemy_turn');
     advance(BOSS_TIMING[state] - BOSS_IMPACT[state] - C.uiTickMs);
     expect(result.current.animation.state).toBe('idle');
     advance(C.enemyTurnMs + C.betweenTurnsMs);
     advance(10000);
     expect(result.current.snapshot.phase).toBe('selecting_attack');
-    expect(result.current.game.player.hp).toBe(hpBefore - 43);
+    expect(result.current.game.player.hp).toBe(hpBefore - 29);
   }
   unmount();
   expect(vi.getTimerCount()).toBe(0);

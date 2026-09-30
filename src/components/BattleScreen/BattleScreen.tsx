@@ -18,8 +18,9 @@ type Props = {
   terminal?: boolean; repeated?: boolean;
   onRecover: (useNumber: number) => void;
   onRoundDeathComplete: (enemyId: string) => void; onNextRound: (enemyId: string) => void;
+  onSkipRound: () => void;
 };
-export function BattleScreen({ state, onExerciseEvent, onEnemyAttack, onRecover, onRoundDeathComplete, onNextRound, onFlee, autoStart, mirrored, terminal = false }: Props) {
+export function BattleScreen({ state, onExerciseEvent, onEnemyAttack, onRecover, onRoundDeathComplete, onNextRound, onSkipRound, onFlee, autoStart, mirrored, terminal = false }: Props) {
   const { player, currentEnemy } = state;
   const roundEnding = state.roundPhase !== 'active';
   const { snapshot, onPoseFrame } = useHandsFreeBattle({ playerHp: player.hp, playerMaxHp: player.maxHp,
@@ -41,7 +42,7 @@ export function BattleScreen({ state, onExerciseEvent, onEnemyAttack, onRecover,
     {currentEnemy.isBoss && <BossCharacter state={terminal ? 'idle' : animation.state}
       hp={currentEnemy.hp} maxHp={currentEnemy.maxHp} eventId={terminal ? 0 : animation.id} paused={terminal && currentEnemy.hp > 0} />}
     {roundEnding && <RoundTransition key={currentEnemy.id} enemyId={currentEnemy.id} phase={state.roundPhase}
-      onDeathComplete={onRoundDeathComplete} onNextRound={onNextRound} />}
+      onDeathComplete={onRoundDeathComplete} onNextRound={onNextRound} onSkip={onSkipRound} />}
     <CameraView onExerciseEvent={onExerciseEvent} onPoseFrame={onPoseFrame} forcedExerciseType={selectedExercise}
       hideSelector autoStart={autoStart} mirrored={mirrored} suspended={terminal}
       formFeedback={snapshot.formFeedback} formFeedbackReliable={snapshot.feedbackReliable} poseDebugContext={snapshot}
