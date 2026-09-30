@@ -13,6 +13,12 @@ const INITIAL: PoseState = {
 };
 const FRAME_INTERVAL = 1000 / 20;
 
+function closeDetector(detector: PoseLandmarker | null) {
+  // A failed WASM runtime can throw again during close. It must not prevent
+  // camera cleanup or the error/retry UI from being published.
+  try { detector?.close(); } catch { /* Resources are no longer usable. */ }
+}
+
 function cameraMessage(error: unknown): string {
   // DOMException can come from a different realm and need not pass instanceof Error.
   const name = typeof error === 'object' && error !== null && 'name' in error ? error.name : '';
@@ -95,7 +101,7 @@ export function usePoseDetection(
       }
       const current = detector;
       detector = null;
-      current?.close();
+      closeDetector(current);
     };
 
     const fail = (message: string, failedStage: 'camera' | 'engine') => {
@@ -217,7 +223,7 @@ export function usePoseDetection(
           minPosePresenceConfidence: 0.5,
           minTrackingConfidence: 0.5,
         });
-        if (cancelled) { created.close(); return; }
+        if (cancelled) { closeDetector(created); return; }
         detector = created;
         setState((previous) => ({ ...previous, engineStatus: 'active' }));
         frameId = requestAnimationFrame(detect);

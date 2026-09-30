@@ -286,6 +286,18 @@ describe('pose lifecycle', () => {
     expect(frames.size).toBe(0);
   });
 
+  it('still reports inference failure and releases the camera if WASM teardown throws', async () => {
+    detector.detectForVideo.mockImplementation(() => { throw new Error('WASM failure'); });
+    detector.close.mockImplementation(() => { throw new Error('WASM already failed'); });
+    const { result, unmount } = renderHook(() => usePoseDetection(videoRef));
+    await start();
+    expect(() => tick(100, 1)).not.toThrow();
+    expect(result.current.error).toContain('POSE DETECTION STOPPED');
+    expect(camera.track.stop).toHaveBeenCalledTimes(1);
+    expect(frames.size).toBe(0);
+    expect(() => unmount()).not.toThrow();
+  });
+
   it('releases resources on pagehide and does not close twice on unmount', async () => {
     const { result, unmount } = renderHook(() => usePoseDetection(videoRef));
     await start();

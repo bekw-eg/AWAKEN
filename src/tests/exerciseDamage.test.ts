@@ -57,4 +57,25 @@ describe('rep-based combat damage', () => {
     expect(applyBattleAttack(next, attack)).toBe(next);
     expect(gameReducer(next, { type: 'enemy_attack' })).toBe(next);
   });
+
+  it('rejects replay of an older set after another set was resolved', () => {
+    const state = gameReducer(createGameState(), { type: 'start_battle' });
+    const first: BattleAttack = { id: 'first', enemyId: 'enemy-1', exercise: 'squat', correctReps: 1 };
+    const second = { ...first, id: 'second' };
+    const next = applyBattleAttack(applyBattleAttack(state, first), second);
+    expect(next.currentEnemy?.hp).toBe(50);
+    expect(applyBattleAttack(next, first)).toBe(next);
+  });
+
+  it('ignores repeated start clicks during a live encounter', () => {
+    const state = gameReducer(createGameState(), { type: 'start_battle' });
+    const next = applyBattleAttack(state, { id: 'first', enemyId: 'enemy-1', exercise: 'squat', correctReps: 1 });
+    expect(gameReducer(next, { type: 'start_battle' })).toBe(next);
+  });
+
+  it('does not attack or revive a player whose HP is already zero', () => {
+    const state = gameReducer(createGameState(), { type: 'start_battle' });
+    const dead = { ...state, player: { ...state.player, hp: 0 } };
+    expect(gameReducer(dead, { type: 'enemy_attack' })).toBe(dead);
+  });
 });

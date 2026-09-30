@@ -137,6 +137,29 @@ describe('hands-free recovery turns', () => {
     expect(s.state.recoveryHoldMs).toBe(0); expect(s.commands).toEqual([]);
   });
 
+  it('cancels recovery safely when a nonempty frame loses required joints', () => {
+    const s = ready(); s.hold(squatFrame(0), 2000);
+    const partial = squatFrame(0);
+    partial.landmarks = partial.landmarks!.slice(0, 12);
+    expect(() => s.frame(partial)).not.toThrow();
+    expect(s.state.phase).toBe('selecting_attack');
+    expect(s.state.recoveryHoldMs).toBe(0);
+    expect(s.commands).toEqual([]);
+    s.hold(squatFrame(0), RECOVERY.holdDurationMs + 50);
+    expect(s.commands).toEqual([{ type: 'recover', useNumber: 1 }]);
+  });
+
+  it('selects push-ups with only one visible side and safely changes sides', () => {
+    const s = new BattleSequence(); s.start();
+    const left = pushUpFrame(0);
+    left.landmarks = left.landmarks!.slice(0, 28);
+    expect(isPushupReadyPose(left)).toBe(true);
+    expect(() => s.hold(left, 300)).not.toThrow();
+    const right = pushUpFrame(0, { side: 'right', leftConfidence: 0 });
+    expect(() => s.hold(right, 800)).not.toThrow();
+    expect(s.state.selectedAttack).toBe('strong');
+  });
+
   it.each(['basic', 'fast', 'strong'] as const)('lets movement cancel recovery and select the %s attack', attack => {
     const s = ready(); s.hold(squatFrame(0), 1700);
     if (attack === 'basic') s.squat();
