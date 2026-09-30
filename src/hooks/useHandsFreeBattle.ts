@@ -16,7 +16,10 @@ export function useHandsFreeBattle({ playerHp, enemyHp, terminal, onExerciseEven
   const advance = useCallback((frame?: PushUpFrame) => {
     const current = latest.current, now = performance.now();
     const commands = controller.advance(now, current, frame);
-    setSnapshot(controller.snapshot(now));
+    const next = controller.snapshot(now);
+    // Timer ticks should not re-render the whole camera and arena when nothing
+    // visible changed (the pose pipeline already supplies up to 20 fps).
+    setSnapshot(previous => (Object.keys(next) as (keyof typeof next)[]).every(key => previous[key] === next[key]) ? previous : next);
     if (current.terminal) return;
     for (const command of commands) {
       if (command.type === 'attack') {

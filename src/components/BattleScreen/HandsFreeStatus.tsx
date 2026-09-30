@@ -18,6 +18,10 @@ export function HandsFreeStatus({ battle, debug = false }: { battle: BattleSnaps
     <p className="eyebrow">THE BODY IS THE CONTROLLER</p>
     <div role="status" aria-live="polite" aria-atomic="true"><h2>{title}</h2><p>{guidance}</p></div>
     {battle.countdown > 0 && <strong className="hands-free-countdown" aria-label={`Countdown ${battle.countdown}`}>{battle.countdown}</strong>}
+    {phase === 'waiting_for_neutral' && <div className="neutral-readiness">
+      <span>START POSITION · {Math.round(battle.neutralProgress * 100)}%</span>
+      <progress aria-label="Starting position readiness" value={battle.neutralProgress} max={1} />
+    </div>}
     {attack && ['performing_attack', 'resolving_attack'].includes(phase) &&
       <strong className="hands-free-countdown" aria-live="polite" aria-label="Attack repetitions">{battle.reps} / {attack.reps}</strong>}
     {phase === 'selecting_attack' && <div className="gesture-choices" aria-label="Attack gestures">
@@ -36,6 +40,7 @@ export function HandsFreeStatus({ battle, debug = false }: { battle: BattleSnaps
       `Phase: ${phase}`, `Candidate: ${battle.candidate ?? 'none'}`, `Squat: ${battle.squatPhase}`,
       `JumpingJack: ${battle.jumpingJackPhase}`, `PushupHold: ${Math.round(battle.pushupHoldMs)} / ${HANDS_FREE_CONFIG.pushupPoseHoldMs} ms`,
       `SelectionLocked: ${battle.selectionLocked}`, `SelectedAttack: ${battle.selectedAttack ?? 'none'}`,
+      `Tracking: ${battle.tracking}`, `Neutral: ${Math.round(battle.neutralProgress * 100)}%`, `Hint: ${battle.feedback ?? 'none'}`,
     ].join('\n')}</pre>}
   </section>;
 }

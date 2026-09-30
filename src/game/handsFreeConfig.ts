@@ -1,4 +1,5 @@
 import type { ExerciseType } from './types';
+import { DEFAULT_SQUAT_CONFIG } from '../exercise-engine/squatDetector';
 
 export const HANDS_FREE_CONFIG = {
   selectionLockMs: 1000,
@@ -6,6 +7,7 @@ export const HANDS_FREE_CONFIG = {
   jumpingJackSelectionCooldownMs: 1200,
   pushupPoseHoldMs: 700,
   neutralHoldMs: 400,
+  neutralJitterMs: 250,
   prepareCountdownMs: 3000,
   introCountdownMs: 3000,
   resolveMs: 1500,
@@ -16,8 +18,8 @@ export const HANDS_FREE_CONFIG = {
   goLabelMs: 800,
   minVisibility: 0.55,
   minPresence: 0.5,
-  standingKneeAngle: 165,
-  standingLeanDeg: 25,
+  standingKneeAngle: DEFAULT_SQUAT_CONFIG.calibrationKneeAngleMin,
+  standingLeanDeg: DEFAULT_SQUAT_CONFIG.calibrationMaxLeanDeg,
   closedAnkleRatio: 1.5,
   armsDownMargin: 0.08,
   pushupMaxDrift: 0.045,

@@ -54,9 +54,12 @@ export function CameraView({ onExerciseEvent, children, forcedExerciseType, onEx
     onPoseFrame({ landmarks: active ? landmarks : null, worldLandmarks: active ? worldLandmarks : null,
       timestampMs: poseTimestampMs ?? performance.now(), imageAspectRatio: videoSize.width / videoSize.height });
   }, [onPoseFrame, suspended, active, landmarks, worldLandmarks, poseTimestampMs, videoSize.width, videoSize.height]);
-  const squat = useSquatExercise(landmarks, worldLandmarks, poseTimestampMs, training && exerciseType === 'squat');
-  const jumpingJack = useJumpingJackExercise(landmarks, worldLandmarks, poseTimestampMs, training && exerciseType === 'jumping-jack');
-  const pushUp = usePushUpExercise(landmarks, worldLandmarks, poseTimestampMs, training && exerciseType === 'push-up',
+  const trainingLandmarks = training ? landmarks : null;
+  const trainingWorld = training ? worldLandmarks : null;
+  const trainingTimestamp = training ? poseTimestampMs : null;
+  const squat = useSquatExercise(trainingLandmarks, trainingWorld, trainingTimestamp, training && exerciseType === 'squat');
+  const jumpingJack = useJumpingJackExercise(trainingLandmarks, trainingWorld, trainingTimestamp, training && exerciseType === 'jumping-jack');
+  const pushUp = usePushUpExercise(trainingLandmarks, trainingWorld, trainingTimestamp, training && exerciseType === 'push-up',
     undefined, videoSize.width / videoSize.height);
   const confirmRep = useCallback((event: ExerciseEvent) => {
     if (suspended || onPoseFrame) return;

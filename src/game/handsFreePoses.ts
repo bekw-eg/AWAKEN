@@ -1,4 +1,4 @@
-import { angle, distance, leanFromVertical } from '../exercise-engine/angles';
+import { angle, distance, leanFromVertical, midpoint } from '../exercise-engine/angles';
 import { DEFAULT_PUSH_UP_CONFIG as PUSH } from '../exercise-engine/pushUpDetector';
 import type { PushUpFrame } from '../exercise-engine/pushUpTypes';
 import type { PosePoint } from '../exercise-engine/types';
@@ -11,13 +11,25 @@ function reliable(p: PosePoint | undefined, image = false, visibility: number = 
 }
 
 export function isStandingPose(frame: PushUpFrame): boolean {
+  return standingPoseFeedback(frame) === null;
+}
+
+/** Match the squat detector's calibration geometry, including the torso midline. */
+export function standingPoseFeedback(frame: PushUpFrame): string | null {
   const image = frame.landmarks, world = frame.worldLandmarks;
-  if (!image || !world) return false;
-  return [[11, 23, 25, 27], [12, 24, 26, 28]].every(ids => {
-    if (ids.some(id => !reliable(image[id], true) || !reliable(world[id]))) return false;
-    const [s, h, k, a] = ids.map(id => world[id]);
-    return (angle(h, k, a) ?? 0) >= C.standingKneeAngle && (leanFromVertical(s, h) ?? Infinity) <= C.standingLeanDeg;
-  });
+  if (!image || !world) return 'Waiting for body tracking';
+  const groups = [{ ids: [11, 12], name: 'shoulders' }, { ids: [23, 24], name: 'hips' },
+    { ids: [25, 26], name: 'knees' }, { ids: [27, 28], name: 'ankles' }];
+  for (const { ids, name } of groups) {
+    if (ids.some(id => !reliable(image[id], true) || !reliable(world[id]))) return `Keep both ${name} visible · step back if needed`;
+  }
+  if ([[23, 25, 27], [24, 26, 28]].some(([h, k, a]) => (angle(world[h], world[k], world[a]) ?? 0) < C.standingKneeAngle)) {
+    return 'Straighten your knees and stand comfortably upright';
+  }
+  if ((leanFromVertical(midpoint(world[11], world[12]), midpoint(world[23], world[24])) ?? Infinity) > C.standingLeanDeg) {
+    return 'Bring your shoulders above your hips';
+  }
+  return null;
 }
 
 export function isClosedPose(frame: PushUpFrame): boolean {

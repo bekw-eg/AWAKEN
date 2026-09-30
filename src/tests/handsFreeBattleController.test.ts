@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HandsFreeBattleController, type BattleCommand } from '../game/handsFreeBattleController';
 import { HANDS_FREE_CONFIG as C } from '../game/handsFreeConfig';
-import { isPushupReadyPose } from '../game/handsFreePoses';
+import { isPushupReadyPose, isStandingPose, standingPoseFeedback } from '../game/handsFreePoses';
 import type { PushUpFrame } from '../exercise-engine/pushUpTypes';
 import { SquatSequence, squatFrame } from './fixtures/squatFrames';
 import { PushUpSequence, pushUpFrame } from './fixtures/pushUpFrames';
@@ -33,6 +33,55 @@ export class BattleSequence {
 }
 
 describe('hands-free orchestration using the real exercise detectors', () => {
+  it('accepts the squat detector calibration stance instead of getting stuck below 165 degrees', () => {
+    const s = new BattleSequence(); s.start(squatFrame(0)); s.hold(squatFrame(0), 1600); s.squat();
+    s.prepare(squatFrame(0, { knee: 155 }));
+    expect(s.state.tracking).toBe(true);
+    expect(s.state.feedback).not.toBe('Show your full body in the camera');
+    expect(s.attacks).toHaveLength(0);
+  });
+
+  it('clears stale camera-loss feedback and gives the actual reason neutral is not ready', () => {
+    const s = new BattleSequence(); s.start(squatFrame(0)); s.hold(squatFrame(0), 1600); s.squat();
+    s.hold({ landmarks: null, worldLandmarks: null }, 1200);
+    expect(s.state.phase).toBe('waiting_for_neutral');
+    expect(s.state.tracking).toBe(false);
+    s.frame(squatFrame(0, { knee: 130 }));
+    expect(s.state.tracking).toBe(true);
+    expect(s.state.feedback).toContain('Straighten your knees');
+    s.hold(squatFrame(0), 300);
+    expect(s.state.feedback).toBe('Position detected · hold still');
+    expect(s.state.neutralProgress).toBeGreaterThan(0);
+    s.prepare(squatFrame(0));
+  });
+
+  it('survives isolated noisy landmarks during neutral hold and countdown without counting a rep', () => {
+    const s = new BattleSequence(); s.start(); s.jack(); s.hold(closedFrame, 1000);
+    for (let n = 0; n < 110 && s.state.phase !== 'performing_attack'; n++) {
+      s.frame(n % 5 === 0 ? openFrame : closedFrame);
+    }
+    expect(s.state.phase).toBe('performing_attack'); expect(s.commands).toEqual([]); expect(s.state.reps).toBe(0);
+    s.hold(closedFrame, 300); s.hold(openFrame, 400); s.hold(closedFrame, 400);
+    expect(s.state.reps).toBe(1);
+  });
+
+  it('requires a fresh valid neutral frame at GO, even after a brief rejected frame', () => {
+    const s = new BattleSequence(); s.start(); s.jack();
+    while (s.state.phase !== 'exercise_prepare') s.frame(closedFrame);
+    s.hold(closedFrame, C.prepareCountdownMs - 50);
+    s.frame(openFrame);
+    expect(s.state.phase).toBe('exercise_prepare'); expect(s.commands).toEqual([]);
+    s.now += 50; s.controller.advance(s.now, s.health);
+    expect(s.state.phase).toBe('exercise_prepare');
+    s.frame(closedFrame); expect(s.state.phase).toBe('performing_attack'); expect(s.state.reps).toBe(0);
+  });
+
+  it('cannot accumulate readiness from isolated valid frames separated by sustained bad poses', () => {
+    const s = new BattleSequence(); s.start(); s.jack(); s.hold(openFrame, 1600);
+    for (let n = 0; n < 15; n++) { s.frame(closedFrame); s.hold(openFrame, 350); }
+    expect(s.state.phase).toBe('waiting_for_neutral'); expect(s.state.neutralProgress).toBe(0);
+    expect(s.commands).toEqual([]);
+  });
   it('separates a complete squat selection from one fresh squat and exactly one enemy turn', () => {
     const s = new BattleSequence(); s.start(squatFrame(0)); s.hold(squatFrame(0), 1600);
     s.squat(140); expect(s.state.selectedAttack).toBeNull();
@@ -116,6 +165,16 @@ describe('hands-free orchestration using the real exercise detectors', () => {
     const s = new BattleSequence(); s.hold({ landmarks: null, worldLandmarks: null }, 10000);
     expect(s.state.phase).toBe('camera_setup'); s.start(); s.hold(closedFrame, 15000); expect(s.commands).toEqual([]);
   });
+});
+
+it('explains missing standing landmarks while rejecting bent knees and leaning', () => {
+  expect(isStandingPose(squatFrame(0, { knee: 155 }))).toBe(true);
+  expect(isStandingPose(squatFrame(0, { knee: 135 }))).toBe(false);
+  expect(isStandingPose(squatFrame(0, { torsoLean: 40 }))).toBe(false);
+  const frame = squatFrame(0);
+  const landmarks = frame.landmarks!.map(point => ({ ...point }));
+  landmarks[27].visibility = 0.1;
+  expect(standingPoseFeedback({ ...frame, landmarks })).toContain('ankles');
 });
 
 it('rejects upright, bent, poorly tracked, and moving plank selection poses', () => {
