@@ -53,5 +53,12 @@ export type GameState = {
   exercises: Record<ExerciseType, ExerciseProgress>;
   currentEnemyIndex: number; // 0 to 10. 10 is Boss.
   currentEnemy: Enemy | null;
-  dailyQuest: { objectives: any[]; rewardClaimed: boolean };
+  dailyQuest: { objectives: QuestObjective[]; rewardClaimed: boolean };
+};
+
+export type QuestObjective = {
+  exercise: ExerciseType;
+  current: number;
+  target: number;
+  completed: boolean;
 };

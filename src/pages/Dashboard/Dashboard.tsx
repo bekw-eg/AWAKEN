@@ -19,7 +19,7 @@ import './Dashboard.css';
 import '../../styles/motion.css';
 
 export function Dashboard() {
-  const { handleExerciseEvent, resetGame: _resetGame, setScreen, startBattle, enemyAttack, recover, completeRoundDeath, startNextRound, ...state } = useGameState();
+  const { handleExerciseEvent, resetGame: _resetGame, setScreen, startBattle, enemyAttack, recover, completeRoundDeath, startNextRound, storageError, ...state } = useGameState();
   const [page, setPage] = useState<Page>('home');
   const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES);
   const [outcome, setOutcome] = useState<BattleOutcome | null>(null);
@@ -85,6 +85,7 @@ export function Dashboard() {
   const viewKey = inArena ? 'battle' : outcome ? 'result' : page;
 
   return <MotionProvider reduced={preferences.reducedMotion}><AppShell page={page} battle={inArena} player={inArena && terminalState ? terminalState.player : state.player} onNavigate={navigate} reducedMotion={preferences.reducedMotion}>
+    {storageError && <p className="error-detail" role="status">Progress could not be saved in this browser. Keep this tab open to retain your current session.</p>}
     <div className="page-motion" key={viewKey}>
     {inArena ? <BattleScreen state={terminalState ?? state} terminal={!!presentedOutcome} repeated={repeated} onExerciseEvent={handleExerciseEvent} onEnemyAttack={enemyAttack} onRecover={recover} onRoundDeathComplete={completeRoundDeath} onNextRound={startNextRound} onFlee={() => navigate('journey')} {...cameraPreferences} />
       : outcome ? <BattleResult outcome={outcome} player={state.player} onContinue={() => navigate('journey')} onRetry={enterBattle} />

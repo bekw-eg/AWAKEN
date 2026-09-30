@@ -1,9 +1,18 @@
-import { useCallback, useReducer } from 'react';
-import { createGameState, gameReducer } from '../game/progression';
+import { useCallback, useEffect, useReducer, useState } from 'react';
+import { gameReducer } from '../game/progression';
+import { loadProgress, saveProgress } from '../game/progressStorage';
 import type { ExerciseEvent, GameState } from '../game/types';
 
 export function useGameState() {
-  const [state, dispatch] = useReducer(gameReducer, undefined, createGameState);
+  const [state, dispatch] = useReducer(gameReducer, undefined, loadProgress);
+  const [storageError, setStorageError] = useState(false);
+  const { player, exercises, currentEnemyIndex, dailyQuest, recoveryCharges, recoveryTraining, roundPhase } = state;
+  // A defeated enemy has already paid its reward. Reloading during the menu
+  // resumes at the next encounter rather than granting the same reward again.
+  const savedEnemyIndex = currentEnemyIndex + (roundPhase !== 'active' ? 1 : 0);
+  useEffect(() => {
+    setStorageError(!saveProgress({ player, exercises, currentEnemyIndex: savedEnemyIndex, dailyQuest, recoveryCharges, recoveryTraining }));
+  }, [player, exercises, savedEnemyIndex, dailyQuest, recoveryCharges, recoveryTraining]);
   
   const handleExerciseEvent = useCallback((event: ExerciseEvent) => dispatch({ type: 'exercise', event }), []);
   const resetGame = useCallback(() => dispatch({ type: 'reset' }), []);
@@ -14,5 +23,5 @@ export function useGameState() {
   const completeRoundDeath = useCallback((enemyId: string) => dispatch({ type: 'round_death_complete', enemyId }), []);
   const startNextRound = useCallback((enemyId: string) => dispatch({ type: 'next_round', enemyId }), []);
 
-  return { ...state, handleExerciseEvent, resetGame, setScreen, startBattle, enemyAttack, recover, completeRoundDeath, startNextRound };
+  return { ...state, storageError, handleExerciseEvent, resetGame, setScreen, startBattle, enemyAttack, recover, completeRoundDeath, startNextRound };
 }

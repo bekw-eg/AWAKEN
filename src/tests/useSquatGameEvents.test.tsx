@@ -1,6 +1,6 @@
 import { StrictMode, type ReactNode } from 'react';
 import { act, cleanup, renderHook } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useGameState } from '../hooks/useGameState';
 import { useSquatGameEvents } from '../hooks/useSquatGameEvents';
 import { useSquatExercise } from '../hooks/useSquatExercise';
@@ -8,6 +8,7 @@ import { SquatSequence } from './fixtures/squatFrames';
 import type { SquatFrame } from '../exercise-engine/types';
 
 afterEach(cleanup);
+beforeEach(() => window.localStorage.clear());
 const wrapper = ({ children }: { children: ReactNode }) => <StrictMode>{children}</StrictMode>;
 
 it('emits once through StrictMode replay, changing callbacks and a sustained true flag', () => {
