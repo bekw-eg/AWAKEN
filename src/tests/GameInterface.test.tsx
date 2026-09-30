@@ -29,7 +29,7 @@ vi.mock('../components/Camera/CameraView', () => ({
   },
 }));
 
-beforeEach(() => { vi.useFakeTimers(); vi.spyOn(window, 'scrollTo').mockImplementation(() => {}); });
+beforeEach(() => { window.localStorage.clear(); vi.useFakeTimers(); vi.spyOn(window, 'scrollTo').mockImplementation(() => {}); });
 afterEach(() => { cleanup(); poseSink = undefined; vi.useRealTimers(); });
 const start = () => { render(<StrictMode><Dashboard /></StrictMode>); fireEvent.click(screen.getByRole('button', { name: 'Enter battle' })); };
 const rep = () => fireEvent.click(screen.getByRole('button', { name: 'Complete correct rep' }));
@@ -124,6 +124,23 @@ it('completes all encounters with hands-free attacks and waits for boss death be
       .toContain(boss ? 'Enemy 1' : encounter === 9 ? 'BOSS 1' : `Enemy ${encounter + 1}`);
   }
 }, 20000);
+
+it('restores the visible profile and quest statistics after the page is remounted', () => {
+  const page = render(<Dashboard />);
+  fireEvent.click(screen.getByRole('button', { name: 'Training' }));
+  rep(); rep();
+  page.unmount();
+  render(<Dashboard />);
+  expect(screen.getByRole('heading', { name: 'Welcome back, Player.' })).toBeTruthy();
+  expect(screen.getByRole('progressbar', { name: 'Level progress' }).getAttribute('aria-valuenow')).toBe('30');
+  expect(screen.getByRole('progressbar', { name: 'Squats objective' }).getAttribute('aria-valuenow')).toBe('2');
+});
+
+it('shows a saving error instead of silently losing progress when storage is unavailable', () => {
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('Full', 'QuotaExceededError'); });
+  render(<Dashboard />);
+  expect(screen.getByText(/Progress could not be saved in this browser/)).toBeTruthy();
+});
 
 it('navigates every page while retaining game progress and applying camera preferences', () => {
   render(<Dashboard />);
