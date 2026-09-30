@@ -2,11 +2,13 @@ import type { GameState, ExerciseEvent } from '../../game/types';
 import { CameraView } from '../Camera/CameraView';
 import { Icon } from '../UI/Icon';
 import { FighterStatus } from './FighterStatus';
-import { BattleStatus, type BattleFeedback } from './BattleStatus';
-import { BattleIntro } from './BattleIntro';
-import { emitMotionEvent, useValueChange } from '../../motion/Motion';
+import { HandsFreeStatus } from './HandsFreeStatus';
+import { HANDS_FREE_ATTACKS } from '../../game/handsFreeConfig';
+import { useHandsFreeBattle } from '../../hooks/useHandsFreeBattle';
+import { BattleOverlay } from './BattleOverlay';
+import { battleOverlay } from '../../game/battleOverlay';
 import { BossCharacter } from '../Boss/BossCharacter';
-import { useEnemyAttackAnimation } from '../../hooks/useEnemyAttackAnimation';
+import { useBossAnimation } from '../../hooks/useBossAnimation';
 import './BattleScreen.css';
 
 type Props = {
@@ -16,34 +18,11 @@ type Props = {
 };
 export function BattleScreen({ state, onExerciseEvent, onEnemyAttack, onFlee, autoStart, mirrored, terminal = false }: Props) {
   const { player, currentEnemy } = state;
-  const [selectedAttack, setSelectedAttack] = useState<ExerciseType>('squat');
-  const { seconds, animation } = useEnemyAttackAnimation(currentEnemy, terminal, onEnemyAttack);
-  const [feedback, setFeedback] = useState<BattleFeedback>(null);
-  const lastAttack = useRef<ExerciseType>('squat');
-  const attackSerial = useRef(0);
-  const [attackEvent, setAttackEvent] = useState(0);
-  const confirmExercise = useCallback((event: ExerciseEvent) => {
-    if (terminal) return;
-    if (event.status === 'correct') {
-      lastAttack.current = event.exercise;
-      setAttackEvent(++attackSerial.current);
-      emitMotionEvent({ type: 'attack', exercise: event.exercise });
-    }
-    onExerciseEvent(event);
-  }, [onExerciseEvent, terminal]);
-
-  useValueChange(currentEnemy?.hp ?? 0, (before, after) => {
-    if (after < before) setFeedback({ kind: 'player', damage: before - after, id: ++attackSerial.current });
-  });
-  useValueChange(player.hp, (before, after) => {
-    if (after < before) setFeedback({ kind: 'enemy', damage: before - after, id: ++attackSerial.current });
-  });
-  useEffect(() => {
-    if (!feedback) return;
-    const timer = setTimeout(() => setFeedback(null), 1500);
-    return () => clearTimeout(timer);
-  }, [feedback]);
-
+  const { snapshot, onPoseFrame } = useHandsFreeBattle({ playerHp: player.hp, enemyHp: currentEnemy?.hp ?? 0,
+    terminal, onExerciseEvent, onEnemyAttack });
+  const selectedExercise = snapshot.selectedAttack ? HANDS_FREE_ATTACKS[snapshot.selectedAttack].exercise : 'squat';
+  const animation = useBossAnimation(currentEnemy, snapshot.phase, terminal);
+  const debug = import.meta.env.DEV && new URLSearchParams(window.location.search).has('battleDebug');
   if (!currentEnemy) return null;
   return <div className={'battle-screen' + (terminal ? ' terminal-battle' : '')}>
     <BattleOverlay announcement={battleOverlay(snapshot)} />
@@ -53,15 +32,12 @@ export function BattleScreen({ state, onExerciseEvent, onEnemyAttack, onFlee, au
       <span className="versus">VS</span>
       <FighterStatus name={currentEnemy.name} hp={currentEnemy.hp} maxHp={currentEnemy.maxHp} enemy boss={currentEnemy.isBoss} attack={selectedExercise} />
     </div>
-    {currentEnemy.isBoss && <BossCharacter state={terminal ? currentEnemy.hp <= 0 ? 'death' : 'idle' : animation.state}
+    {currentEnemy.isBoss && <BossCharacter state={terminal ? 'idle' : animation.state}
       hp={currentEnemy.hp} maxHp={currentEnemy.maxHp} eventId={terminal ? 0 : animation.id} paused={terminal && currentEnemy.hp > 0} />}
-    <CameraView onExerciseEvent={confirmExercise} forcedExerciseType={selectedAttack} onExerciseChange={setSelectedAttack} hideSelector autoStart={autoStart} mirrored={mirrored} suspended={terminal}>
-      {(telemetry) => <>
-        <BattleStatus telemetry={telemetry} selected={selectedAttack} feedback={feedback} seconds={seconds} terminal={terminal} />
-        <AttackSelector selected={selectedAttack} onSelect={attack => { setSelectedAttack(attack); setFeedback(null); }} player={player} eventId={attackEvent}
-          performing={telemetry.active && telemetry.isPersonDetected && telemetry.trackingStatus === 'ready' && !['standing', 'top', 'closed'].includes(telemetry.phase)}
-          completed={feedback?.kind === 'player'} disabled={terminal} />
-      </>}
-    </CameraView>
+    <CameraView onExerciseEvent={onExerciseEvent} onPoseFrame={onPoseFrame} forcedExerciseType={selectedExercise}
+      hideSelector autoStart={autoStart} mirrored={mirrored} suspended={terminal}
+      formFeedback={snapshot.formFeedback} formFeedbackReliable={snapshot.feedbackReliable} poseDebugContext={snapshot}
+      formFeedbackSource={`${snapshot.selectedAttack ?? 'selection'}:${['waiting_for_neutral', 'exercise_prepare', 'exercise_announcement'].includes(snapshot.phase) ? 'prepare' : snapshot.phase}`}
+      trackingPanel={<HandsFreeStatus battle={snapshot} debug={debug} />} />
   </div>;
 }
