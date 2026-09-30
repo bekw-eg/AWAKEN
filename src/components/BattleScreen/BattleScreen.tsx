@@ -1,8 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import type { GameState, ExerciseType, ExerciseEvent } from '../../game/types';
+import type { GameState, ExerciseEvent } from '../../game/types';
 import { CameraView } from '../Camera/CameraView';
 import { Icon } from '../UI/Icon';
-import { AttackSelector } from './AttackSelector';
 import { FighterStatus } from './FighterStatus';
 import { BattleStatus, type BattleFeedback } from './BattleStatus';
 import { BattleIntro } from './BattleIntro';
@@ -16,7 +14,7 @@ type Props = {
   onEnemyAttack: () => void; onFlee: () => void; autoStart?: boolean; mirrored?: boolean;
   terminal?: boolean; repeated?: boolean;
 };
-export function BattleScreen({ state, onExerciseEvent, onEnemyAttack, onFlee, autoStart, mirrored, terminal = false, repeated = false }: Props) {
+export function BattleScreen({ state, onExerciseEvent, onEnemyAttack, onFlee, autoStart, mirrored, terminal = false }: Props) {
   const { player, currentEnemy } = state;
   const [selectedAttack, setSelectedAttack] = useState<ExerciseType>('squat');
   const { seconds, animation } = useEnemyAttackAnimation(currentEnemy, terminal, onEnemyAttack);
@@ -48,12 +46,12 @@ export function BattleScreen({ state, onExerciseEvent, onEnemyAttack, onFlee, au
 
   if (!currentEnemy) return null;
   return <div className={'battle-screen' + (terminal ? ' terminal-battle' : '')}>
-    {!terminal && <BattleIntro enemy={currentEnemy} repeated={repeated} />}
-    <header className="battle-header"><button className="text-button" onClick={onFlee}><Icon name="ArrowLeft" />Journey</button><div><p className="eyebrow">TRAINING GROUNDS</p><h1>{currentEnemy.isBoss ? 'Boss fight' : 'Battle arena'}</h1></div><span className="badge"><Icon name="Flag" />ENCOUNTER {String(state.currentEnemyIndex).padStart(2, '0')}</span></header>
+    <BattleOverlay announcement={battleOverlay(snapshot)} />
+    <header className="battle-header"><button className="text-button" onClick={onFlee}><Icon name="ArrowLeft" />Journey</button><div><p className="eyebrow">HANDS-FREE COMBAT</p><h1>{currentEnemy.isBoss ? 'Boss fight' : 'Battle arena'}</h1></div><span className="badge"><Icon name="Flag" />ENCOUNTER {String(state.currentEnemyIndex).padStart(2, '0')}</span></header>
     <div className="combatants">
       <FighterStatus name="Player" level={player.level} hp={player.hp} maxHp={player.maxHp} />
       <span className="versus">VS</span>
-      <FighterStatus name={currentEnemy.name} hp={currentEnemy.hp} maxHp={currentEnemy.maxHp} enemy boss={currentEnemy.isBoss} attack={lastAttack.current} />
+      <FighterStatus name={currentEnemy.name} hp={currentEnemy.hp} maxHp={currentEnemy.maxHp} enemy boss={currentEnemy.isBoss} attack={selectedExercise} />
     </div>
     {currentEnemy.isBoss && <BossCharacter state={terminal ? currentEnemy.hp <= 0 ? 'death' : 'idle' : animation.state}
       hp={currentEnemy.hp} maxHp={currentEnemy.maxHp} eventId={terminal ? 0 : animation.id} paused={terminal && currentEnemy.hp > 0} />}
