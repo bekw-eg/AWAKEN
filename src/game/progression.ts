@@ -32,7 +32,7 @@ export function generateEnemy(index: number): Enemy {
 export function createGameState(): GameState {
   return {
     screen: 'main',
-    lastBattleAttackId: null,
+    resolvedBattleAttackIds: [],
     roundPhase: 'active',
     recoveryUses: 0,
     recoveryCharges: 0,
@@ -133,11 +133,11 @@ export function applyExerciseEvent(state: GameState, event: ExerciseEvent): Game
 export function applyBattleAttack(state: GameState, attack: BattleAttack): GameState {
   const enemy = state.currentEnemy;
   if (state.screen !== 'battle' || state.roundPhase !== 'active' || !enemy || enemy.hp <= 0 || state.player.hp <= 0 ||
-    enemy.id !== attack.enemyId || state.lastBattleAttackId === attack.id || !attack.id ||
+    enemy.id !== attack.enemyId || state.resolvedBattleAttackIds.includes(attack.id) || !attack.id ||
     !Number.isSafeInteger(attack.correctReps) || attack.correctReps < 0) return state;
   const damage = calculateAttackDamage(attack);
   const hp = Math.max(0, enemy.hp - damage);
-  const next = { ...state, lastBattleAttackId: attack.id, currentEnemy: { ...enemy, hp },
+  const next = { ...state, resolvedBattleAttackIds: [...state.resolvedBattleAttackIds, attack.id], currentEnemy: { ...enemy, hp },
     exercises: { ...state.exercises, [attack.exercise]: addExerciseXp(state.exercises[attack.exercise], REP_XP * attack.correctReps) } };
   if (hp > 0) return next;
   const player = addPlayerXp(next.player, enemy.isBoss ? 200 : 50);
@@ -169,14 +169,15 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, screen: action.screen,
         currentEnemyIndex: state.currentEnemyIndex + (state.roundPhase !== 'active' ? 1 : 0), roundPhase: 'active' };
     case 'start_battle':
-      return { ...state, screen: 'battle', roundPhase: 'active', recoveryUses: 0, lastBattleAttackId: null, currentEnemy: generateEnemy(state.currentEnemyIndex) };
+      if (state.screen === 'battle') return state;
+      return { ...state, screen: 'battle', roundPhase: 'active', recoveryUses: 0, resolvedBattleAttackIds: [], currentEnemy: generateEnemy(state.currentEnemyIndex) };
     case 'round_death_complete':
       if (state.screen !== 'battle' || state.roundPhase !== 'enemy_defeated' || state.currentEnemy?.id !== action.enemyId) return state;
       return { ...state, roundPhase: 'round_transition' };
     case 'next_round': {
       if (state.screen !== 'battle' || state.roundPhase !== 'round_transition' || state.currentEnemy?.id !== action.enemyId) return state;
       const currentEnemyIndex = state.currentEnemyIndex + 1;
-      return { ...state, currentEnemyIndex, currentEnemy: generateEnemy(currentEnemyIndex), roundPhase: 'active', recoveryUses: 0 };
+      return { ...state, currentEnemyIndex, currentEnemy: generateEnemy(currentEnemyIndex), roundPhase: 'active', recoveryUses: 0, resolvedBattleAttackIds: [] };
     }
     case 'recover':
       if (state.screen !== 'battle' || state.roundPhase !== 'active' || !state.currentEnemy || state.currentEnemy.hp <= 0 ||
@@ -185,7 +186,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, recoveryUses: action.useNumber, recoveryCharges: state.recoveryCharges - 1, player: { ...state.player,
         hp: Math.min(state.player.maxHp, state.player.hp + Math.round(state.player.maxHp * recoveryHealPercent(state.currentEnemyIndex) / 100)) } };
     case 'enemy_attack': {
-      if (state.screen !== 'battle' || !state.currentEnemy || state.currentEnemy.hp <= 0 || state.roundPhase !== 'active') return state;
+      if (state.screen !== 'battle' || !state.currentEnemy || state.currentEnemy.hp <= 0 || state.player.hp <= 0 || state.roundPhase !== 'active') return state;
       const damage = Math.max(1, state.currentEnemy.attack - Math.floor(state.player.defense / 2));
       const playerHp = Math.max(0, state.player.hp - damage);
       let nextState = { ...state, player: { ...state.player, hp: playerHp } };

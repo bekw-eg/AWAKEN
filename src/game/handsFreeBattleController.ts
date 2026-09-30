@@ -228,9 +228,11 @@ export class HandsFreeBattleController {
           this.selectFromFrame(frame, now);
           // A completed attack gesture takes priority over idle recovery.
           if (this.phase !== 'recovering') { this.cancelRecovery(); break; }
+          // Validate required joints before comparing them with the hold anchor.
+          if (!this.tracking || !this.recoveryPose(frame)) { this.cancelRecovery(); break; }
           const moved = this.recoveryAnchor && frame.landmarks && [11, 12, 15, 16, 23, 24, 27, 28].some(id =>
             Math.hypot(frame.landmarks![id].x - this.recoveryAnchor![id].x, frame.landmarks![id].y - this.recoveryAnchor![id].y) > RECOVERY.maxPoseDrift);
-          if (!this.tracking || !this.recoveryPose(frame) || moved) { this.cancelRecovery(); break; }
+          if (moved) { this.cancelRecovery(); break; }
           this.visualReady = true;
           this.feedbackReliable = true;
           this.feedback = 'Hold still to recover · move to cancel';
@@ -294,9 +296,15 @@ export class HandsFreeBattleController {
     if (jack.repJustCounted && jack.formStatus !== 'error' && now - this.lastSelected.fast >= C.jumpingJackSelectionCooldownMs) { this.select('fast', now); return; }
     // Selection recognizes gestures; full form feedback belongs to performing_attack.
     if (isPushupReadyPose(frame)) {
-      const moved = this.pushupAnchor && [11, 12, 23, 24, 27, 28].some(id =>
-        (frame.landmarks![id].visibility ?? 0) >= C.minVisibility &&
-        Math.hypot(frame.landmarks![id].x - this.pushupAnchor![id].x, frame.landmarks![id].y - this.pushupAnchor![id].y) > C.pushupMaxDrift);
+      const moved = this.pushupAnchor && [11, 12, 23, 24, 27, 28].some(id => {
+        const point = frame.landmarks?.[id], anchor = this.pushupAnchor?.[id];
+        // A side view needs only one side. Newly visible joints start a new hold.
+        if (!point || (point.visibility ?? 0) < C.minVisibility ||
+            (point.presence ?? 1) < C.minPresence || ![point.x, point.y].every(Number.isFinite)) return false;
+        return !anchor || (anchor.visibility ?? 0) < C.minVisibility ||
+          (anchor.presence ?? 1) < C.minPresence || ![anchor.x, anchor.y].every(Number.isFinite) ||
+          Math.hypot(point.x - anchor.x, point.y - anchor.y) > C.pushupMaxDrift;
+      });
       if (this.pushupHoldAt === null || moved) { this.pushupHoldAt = now; this.pushupAnchor = frame.landmarks; }
       this.pushupHoldMs = now - this.pushupHoldAt;
       this.candidate = 'strong';
