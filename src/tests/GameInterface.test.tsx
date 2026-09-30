@@ -10,6 +10,7 @@ import { PushUpSequence, pushUpFrame } from './fixtures/pushUpFrames';
 import { closedFrame, openFrame } from './fixtures/jumpingJackFrames';
 import { BOSS_TIMING } from '../components/Boss/BossCharacter';
 import * as progression from '../game/progression';
+import { mockDialogs } from './fixtures/dialog';
 
 // Feed real pose sequences at the camera boundary. Controller, detectors, game
 // reducer, dashboard terminal presentation, and StrictMode lifecycle stay real.
@@ -29,7 +30,7 @@ vi.mock('../components/Camera/CameraView', () => ({
   },
 }));
 
-beforeEach(() => { vi.useFakeTimers(); vi.spyOn(window, 'scrollTo').mockImplementation(() => {}); });
+beforeEach(() => { vi.useFakeTimers(); mockDialogs(); vi.spyOn(window, 'scrollTo').mockImplementation(() => {}); });
 afterEach(() => { cleanup(); poseSink = undefined; vi.useRealTimers(); });
 const start = () => { render(<StrictMode><Dashboard /></StrictMode>); fireEvent.click(screen.getByRole('button', { name: 'Enter battle' })); };
 const rep = () => fireEvent.click(screen.getByRole('button', { name: 'Complete correct rep' }));

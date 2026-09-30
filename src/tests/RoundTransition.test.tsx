@@ -2,14 +2,17 @@ import { StrictMode } from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { RoundTransition } from '../components/BattleScreen/RoundTransition';
+import { mockDialogs } from './fixtures/dialog';
 
-beforeEach(() => vi.useFakeTimers());
+beforeEach(() => { vi.useFakeTimers(); mockDialogs(); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 it.each([0, 4999, 5000])('arbitrates continue and timeout once at %i ms in StrictMode', delay => {
   const next = vi.fn();
   render(<StrictMode><RoundTransition enemyId="enemy-1" phase="round_transition" onDeathComplete={vi.fn()} onNextRound={next} /></StrictMode>);
   const button = screen.getByRole('button', { name: 'CONTINUE →' });
+  expect(screen.getByRole('dialog', { name: 'Round complete' }).parentElement).toBe(document.body);
+  expect(document.activeElement).toBe(button);
   act(() => vi.advanceTimersByTime(delay));
   fireEvent.click(button); fireEvent.click(button);
   act(() => vi.advanceTimersByTime(10000));
