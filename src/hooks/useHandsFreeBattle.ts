@@ -5,18 +5,18 @@ import { HandsFreeBattleController } from '../game/handsFreeBattleController';
 import { HANDS_FREE_CONFIG } from '../game/handsFreeConfig';
 import { emitMotionEvent } from '../motion/Motion';
 
-export function useHandsFreeBattle({ playerHp, playerMaxHp = 100, enemyHp, enemyId, isBoss = false, terminal, onExerciseEvent, onEnemyAttack, onRecover }: {
+export function useHandsFreeBattle({ playerHp, playerMaxHp = 100, enemyHp, enemyId, round = 1, recoveryCharges = 0, recoveryUses = 0, terminal, onExerciseEvent, onEnemyAttack, onRecover }: {
   playerHp: number; enemyHp: number; terminal: boolean;
-  playerMaxHp?: number; enemyId?: string; isBoss?: boolean; onRecover?: (useNumber: number) => void;
+  playerMaxHp?: number; enemyId?: string; round?: number; recoveryCharges?: number; recoveryUses?: number; onRecover?: (useNumber: number) => void;
   onExerciseEvent: (event: ExerciseEvent) => void; onEnemyAttack: () => void;
 }) {
-  const controller = useMemo(() => new HandsFreeBattleController(isBoss), [enemyId, isBoss]);
+  const controller = useMemo(() => new HandsFreeBattleController(round), [enemyId, round]);
   const [snapshot, setSnapshot] = useState(() => controller.snapshot(performance.now()));
-  const latest = useRef({ playerHp, playerMaxHp, enemyHp, terminal, onExerciseEvent, onEnemyAttack, onRecover });
-  useLayoutEffect(() => { latest.current = { playerHp, playerMaxHp, enemyHp, terminal, onExerciseEvent, onEnemyAttack, onRecover }; });
+  const latest = useRef({ playerHp, playerMaxHp, enemyHp, recoveryCharges, recoveryUses, terminal, onExerciseEvent, onEnemyAttack, onRecover });
+  useLayoutEffect(() => { latest.current = { playerHp, playerMaxHp, enemyHp, recoveryCharges, recoveryUses, terminal, onExerciseEvent, onEnemyAttack, onRecover }; });
   const advance = useCallback((frame?: PushUpFrame) => {
     const current = latest.current, now = performance.now();
-    const commands = controller.advance(now, current, frame);
+    const commands = controller.advance(now, { ...current, recoveryCharges: current.onRecover ? current.recoveryCharges : 0 }, frame);
     const next = controller.snapshot(now);
     // Timer ticks should not re-render the whole camera and arena when nothing
     // visible changed (the pose pipeline already supplies up to 20 fps).
@@ -40,10 +40,5 @@ export function useHandsFreeBattle({ playerHp, playerMaxHp = 100, enemyHp, enemy
     const timer = setInterval(() => advance(), HANDS_FREE_CONFIG.uiTickMs);
     return () => clearInterval(timer);
   }, [advance, terminal]);
-  const startRecovery = useCallback(() => {
-    const current = latest.current;
-    if (current.terminal || current.playerHp <= 0 || current.enemyHp <= 0 || !current.onRecover) return;
-    if (controller.startRecovery(performance.now())) setSnapshot(controller.snapshot(performance.now()));
-  }, [controller]);
-  return { snapshot, onPoseFrame: advance, startRecovery };
+  return { snapshot, onPoseFrame: advance };
 }

@@ -137,7 +137,7 @@
 [data-round-phase="round_transition"] .fighter-enemy { opacity: .25; }
 .recovery-choice { text-align: left; border-color: var(--success); background: color-mix(in srgb, var(--success) 8%, var(--surface)); }
 .recovery-choice strong, .recovery-progress strong { color: var(--success); }
-.recovery-choice:disabled { opacity: .5; cursor: not-allowed; }
+.recovery-choice[aria-disabled="true"] { opacity: .6; }
 .recovery-progress { display: grid; gap: 12px; margin: 20px 0; font-variant-numeric: tabular-nums; }
 .recovery-progress progress { width: 100%; accent-color: var(--success); }
 [data-phase="resolving_recovery"] { animation: recovery-complete 1500ms ease-out; }

@@ -11,3 +11,8 @@
 .quest-reward strong { display: block; font-size: 8px; letter-spacing: 1px; color: var(--text-muted); font-weight: 500; }
 .quest-reward div > span { display: block; font-size: 12px; margin-top: 6px; }
 .quest-reward.complete > .icon, .quest-reward.complete strong { color: var(--success); }
+.recovery-training { margin-bottom: 24px; }
+.recovery-training > p { color: var(--text-secondary); font-size: 12px; }
+.recovery-training .section-title > strong { color: var(--accent); font-size: 12px; white-space: nowrap; }
+.recovery-training-sets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin: 20px 0; }
+@media (max-width: 650px) { .recovery-training-sets { grid-template-columns: 1fr; gap: 16px; } }

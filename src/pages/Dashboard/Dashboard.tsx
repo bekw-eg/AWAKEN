@@ -7,6 +7,7 @@ import { BattleResult, type BattleOutcome } from '../../components/BattleScreen/
 import { PageHeader } from '../../components/UI/PageHeader';
 import { Icon } from '../../components/UI/Icon';
 import { DailyQuest } from '../../components/DailyQuest/DailyQuest';
+import { RecoveryTraining } from '../../components/DailyQuest/RecoveryTraining';
 import { useGameState } from '../../hooks/useGameState';
 import { ProfileScreen } from './ProfileScreen';
 import { SettingsScreen, DEFAULT_PREFERENCES } from './SettingsScreen';
@@ -89,6 +90,7 @@ export function Dashboard() {
       : outcome ? <BattleResult outcome={outcome} player={state.player} onContinue={() => navigate('journey')} onRetry={enterBattle} />
       : page === 'training' ? <>
         <PageHeader eyebrow="TRAINING / REAL-WORLD INPUT" title="Your body is the controller." description="Choose a movement. Find your form. Build your next level."><span className="badge badge-accent"><Icon name="TrendingUp" />+15 XP / REP</span></PageHeader>
+        <RecoveryTraining state={state} />
         <CameraView onExerciseEvent={handleExerciseEvent} {...cameraPreferences} />
         <div className="training-progress"><DailyQuest quest={state.dailyQuest} /><div className="training-progress-copy"><p className="eyebrow">PUT IN THE REPS</p><h2>Stronger with every session.</h2><p>Correct reps build exercise mastery. Finish training objectives to earn attributes, bonus XP, and gold.</p><button className="button button-quiet" onClick={() => navigate('profile')}>View your progress<Icon name="ArrowRight" /></button></div></div>
       </>

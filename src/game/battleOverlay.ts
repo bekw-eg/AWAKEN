@@ -1,7 +1,7 @@
 import type { BattleSnapshot } from './handsFreeBattleController';
 import { HANDS_FREE_ATTACKS, type AttackType } from './handsFreeConfig';
 
-export type BattleOverlayType = 'countdown' | 'fight' | 'attack_selected' | 'exercise' | 'damage' | 'enemy_turn' | 'victory' | 'defeat';
+export type BattleOverlayType = 'countdown' | 'recovery' | 'fight' | 'attack_selected' | 'exercise' | 'damage' | 'enemy_turn' | 'victory' | 'defeat';
 export type BattleOverlayState = { type: BattleOverlayType; text: string; detail?: string };
 export const EXERCISE_ANNOUNCEMENTS: Record<AttackType, string> = { basic: 'SQUAT!', fast: 'JUMPING JACKS!', strong: 'PUSH-UPS!' };
 
@@ -15,7 +15,8 @@ export function battleOverlay(battle: BattleSnapshot): BattleOverlayState | null
     case 'attack_confirmed': return { type: 'attack_selected', text: `${attack?.name} ATTACK`, detail: 'SELECTED' };
     case 'exercise_announcement': return battle.selectedAttack ? { type: 'exercise', text: EXERCISE_ANNOUNCEMENTS[battle.selectedAttack], detail: 'START AFTER THIS TITLE' } : null;
     case 'resolving_attack': return { type: 'damage', text: `${attack?.name} ATTACK`, detail: 'HIT!' };
-    case 'resolving_recovery': return { type: 'damage', text: 'RECOVERY COMPLETE', detail: `+${battle.recoveryHealedHp} HP` };
+    case 'recovering': return { type: 'recovery', text: `RECOVERY IN ${battle.countdown}`, detail: `HOLD STILL · +${battle.recoveryPercent}% MAX HP · MOVE TO CANCEL` };
+    case 'resolving_recovery': return { type: 'recovery', text: `+${battle.recoveryHealedHp} HP`, detail: `RECOVERY COMPLETE · ${battle.recoveryPercent}% MAX HP` };
     case 'enemy_turn': return { type: 'enemy_turn', text: 'ENEMY TURN', detail: 'BRACE YOURSELF' };
     case 'victory': return { type: 'victory', text: 'VICTORY' };
     case 'defeat': return { type: 'defeat', text: 'DEFEAT' };

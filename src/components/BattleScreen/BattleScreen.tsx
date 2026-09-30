@@ -22,8 +22,9 @@ type Props = {
 export function BattleScreen({ state, onExerciseEvent, onEnemyAttack, onRecover, onRoundDeathComplete, onNextRound, onFlee, autoStart, mirrored, terminal = false }: Props) {
   const { player, currentEnemy } = state;
   const roundEnding = state.roundPhase !== 'active';
-  const { snapshot, onPoseFrame, startRecovery } = useHandsFreeBattle({ playerHp: player.hp, playerMaxHp: player.maxHp,
-    enemyHp: currentEnemy?.hp ?? 0, enemyId: currentEnemy?.id, isBoss: currentEnemy?.isBoss,
+  const { snapshot, onPoseFrame } = useHandsFreeBattle({ playerHp: player.hp, playerMaxHp: player.maxHp,
+    enemyHp: currentEnemy?.hp ?? 0, enemyId: currentEnemy?.id, round: state.currentEnemyIndex,
+    recoveryCharges: state.recoveryCharges, recoveryUses: state.recoveryUses,
     terminal: terminal || roundEnding, onExerciseEvent, onEnemyAttack, onRecover });
   const selectedExercise = snapshot.selectedAttack ? HANDS_FREE_ATTACKS[snapshot.selectedAttack].exercise : 'squat';
   const animation = useBossAnimation(currentEnemy, snapshot.phase, terminal);
@@ -46,6 +47,6 @@ export function BattleScreen({ state, onExerciseEvent, onEnemyAttack, onRecover,
       formFeedback={snapshot.formFeedback} formFeedbackReliable={snapshot.feedbackReliable} poseDebugContext={snapshot}
       formFeedbackSource={`${snapshot.selectedAttack ?? 'selection'}:${['waiting_for_neutral', 'exercise_prepare', 'exercise_announcement'].includes(snapshot.phase) ? 'prepare' : snapshot.phase}`}
       trackingPanel={roundEnding ? <p className="hands-free-status">{state.roundPhase === 'enemy_defeated' ? 'ENEMY DEFEATED' : 'NEXT ROUND INCOMING'}</p> :
-        <HandsFreeStatus battle={snapshot} debug={debug} isBoss={currentEnemy.isBoss} onRecover={startRecovery} />} />
+        <HandsFreeStatus battle={snapshot} debug={debug} />} />
   </div>;
 }

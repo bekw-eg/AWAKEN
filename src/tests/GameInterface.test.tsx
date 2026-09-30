@@ -139,53 +139,77 @@ it('completes all encounters with hands-free attacks and waits for boss death be
   }
 }, 20000);
 
-it('recovers through the camera, pauses invalid form, and gives the boss its standard attack', () => {
+it('announces recovery without a click and allows two boss heals on consecutive turns', () => {
   const initial = progression.createGameState();
-  vi.spyOn(progression, 'createGameState').mockImplementation(() => ({ ...initial, currentEnemyIndex: 10,
+  vi.spyOn(progression, 'createGameState').mockImplementation(() => ({ ...initial, currentEnemyIndex: 10, recoveryCharges: 3,
     player: { ...initial.player, hp: 24 } }));
   start(); hold(squatFrame(0), 3300);
-  fireEvent.click(screen.getByRole('button', { name: 'Recover' }));
+  expect(screen.queryByRole('button', { name: 'Recover' })).toBeNull();
   expect(screen.getByRole('heading', { name: 'RECOVERY MODE' })).toBeTruthy();
-  hold(squatFrame(0), 2050);
-  expect(screen.getByText('RECOVERY 2.0 / 5.0 SEC')).toBeTruthy();
-  hold(squatFrame(0, { knee: 100 }), 1500);
-  expect(screen.getByText('RECOVERY 2.0 / 5.0 SEC')).toBeTruthy();
-  expect(hp('Player')).toBe(24); expect(hp('BOSS 1')).toBe(600);
-  hold(squatFrame(0), 3050);
-  expect(hp('Player')).toBe(54);
-  expect(screen.getByRole('heading', { name: 'RECOVERY COMPLETE' })).toBeTruthy();
-  expect(screen.getByTestId('battle-overlay').textContent).toContain('+30 HP');
+  for (const seconds of [5, 4, 3, 2, 1]) {
+    expect(screen.getByTestId('battle-overlay').textContent).toContain('RECOVERY IN ' + seconds);
+    expect(hp('Player')).toBe(24);
+    hold(squatFrame(0), 1000);
+  }
+  expect(hp('Player')).toBe(74);
+  expect(screen.getByTestId('battle-overlay').textContent).toContain('+50 HP');
+  expect(screen.getByTestId('battle-overlay').textContent).toContain('50% MAX HP');
   act(() => vi.advanceTimersByTime(1500));
-  expect(hp('Player')).toBe(11);
-  expect(hp('BOSS 1')).toBe(600);
+  expect(hp('Player')).toBe(31); expect(hp('BOSS 1')).toBe(600);
   act(() => vi.advanceTimersByTime(2700));
-  expect((screen.getByRole('button', { name: 'Recover' }) as HTMLButtonElement).disabled).toBe(true);
-  expect(screen.getByText('Cooldown: 3')).toBeTruthy();
-  expect(screen.getByText('1 USE LEFT')).toBeTruthy();
+  expect(screen.getByText('2 / 3 CHARGES · 1 / 2 USES LEFT THIS FIGHT')).toBeTruthy();
+  hold(squatFrame(0), 5050);
+  expect(hp('Player')).toBe(81);
+  act(() => vi.advanceTimersByTime(4200));
+  expect(hp('Player')).toBe(38);
+  expect(screen.getByText('FIGHT LIMIT REACHED')).toBeTruthy();
+  expect(screen.getByText('1 / 3 CHARGES · 0 / 2 USES LEFT THIS FIGHT')).toBeTruthy();
+  hold(squatFrame(0), 6000);
+  expect(hp('Player')).toBe(38);
 });
 
-it('enables the last recovery after three player turns, then shows depleted', () => {
+it('cancels the countdown on movement, heals only missing HP in round one and exhausts its charge', () => {
   const initial = progression.createGameState();
-  vi.spyOn(progression, 'createGameState').mockImplementation(() => ({ ...initial, currentEnemyIndex: 10,
-    player: { ...initial.player, hp: 88, defense: 100 } }));
+  vi.spyOn(progression, 'createGameState').mockImplementation(() => ({ ...initial, recoveryCharges: 1,
+    player: { ...initial.player, hp: 95 } }));
   start(); hold(squatFrame(0), 3300);
-  fireEvent.click(screen.getByRole('button', { name: 'Recover' }));
-  hold(squatFrame(0), 5050);
+  hold(squatFrame(0), 2000);
+  expect(screen.getByTestId('battle-overlay').textContent).toContain('RECOVERY IN 3');
+  frame(openFrame);
+  expect(screen.queryByTestId('battle-overlay')).toBeNull();
+  expect(hp('Player')).toBe(95);
+  expect(screen.getByText('1 / 3 CHARGES · 2 / 2 USES LEFT THIS FIGHT')).toBeTruthy();
+  frame(squatFrame(0));
+  expect(screen.getByTestId('battle-overlay').textContent).toContain('RECOVERY IN 5');
+  hold(squatFrame(0), 4950);
+  expect(hp('Player')).toBe(95);
+  frame(squatFrame(0));
   expect(hp('Player')).toBe(100);
-  expect(screen.getByTestId('battle-overlay').textContent).toContain('+12 HP');
+  expect(screen.getByTestId('battle-overlay').textContent).toContain('+5 HP');
   act(() => vi.advanceTimersByTime(4200));
-  for (const remaining of [3, 2, 1]) {
-    expect(screen.getByText(`Cooldown: ${remaining}`)).toBeTruthy();
-    hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup();
-    act(() => vi.advanceTimersByTime(4200));
-  }
-  expect((screen.getByRole('button', { name: 'Recover' }) as HTMLButtonElement).disabled).toBe(false);
-  fireEvent.click(screen.getByRole('button', { name: 'Recover' }));
-  hold(squatFrame(0), 5050);
-  act(() => vi.advanceTimersByTime(4200));
-  expect(screen.getByText('DEPLETED')).toBeTruthy();
-  expect(screen.getByText('0 USES LEFT')).toBeTruthy();
-  expect((screen.getByRole('button', { name: 'Recover' }) as HTMLButtonElement).disabled).toBe(true);
+  expect(hp('Player')).toBe(96); expect(hp('Enemy 1')).toBe(60);
+  expect(screen.getByText('NO CHARGES · EARN IN TRAINING')).toBeTruthy();
+  hold(squatFrame(0), 6000);
+  expect(hp('Player')).toBe(96);
+});
+
+it('earns and displays three Training charges, carries them into combat and saves them at full HP', () => {
+  render(<Dashboard />);
+  fireEvent.click(screen.getByRole('button', { name: 'Training' }));
+  expect(screen.getByText('0 / 3 CHARGES')).toBeTruthy();
+  for (let n = 0; n < 9; n++) rep();
+  expect(screen.getByText('0 / 3 CHARGES')).toBeTruthy();
+  rep(); expect(screen.getByText('1 / 3 CHARGES')).toBeTruthy();
+  for (let n = 0; n < 20; n++) rep();
+  expect(screen.getByText('3 / 3 CHARGES')).toBeTruthy();
+  for (let n = 0; n < 10; n++) rep();
+  expect(screen.getByText('3 / 3 CHARGES')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Journey' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Enter battle' }));
+  hold(squatFrame(0), 9000);
+  expect(screen.getByText('HP FULL · CHARGES SAVED')).toBeTruthy();
+  expect(screen.getByText('3 / 3 CHARGES · 2 / 2 USES LEFT THIS FIGHT')).toBeTruthy();
+  expect(phase()).toBe('selecting_attack');
 });
 
 it('navigates every page while retaining game progress and applying camera preferences', () => {

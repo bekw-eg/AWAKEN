@@ -71,29 +71,87 @@ describe('game progression', () => {
     expect(gameReducer(state, { type: 'next_round', enemyId: 'test' })).toBe(state);
   });
 
-  it.each([[24, 100, 54], [88, 100, 100], [40, 200, 100]])('heals %i / %i to %i without awarding XP or changing boss damage', (hp, maxHp, healed) => {
-    let state = gameReducer({ ...createGameState(), currentEnemyIndex: 10 }, { type: 'start_battle' });
+  it.each([[1, 24, 100, 34], [2, 24, 100, 39], [5, 24, 100, 54], [10, 24, 100, 74], [1, 95, 100, 100], [5, 40, 200, 100]])(
+    'round %i heals %i / %i to %i without XP or stronger enemy attacks', (round, hp, maxHp, healed) => {
+    let state = gameReducer({ ...createGameState(), currentEnemyIndex: round, recoveryCharges: 3 }, { type: 'start_battle' });
     state.player = { ...state.player, hp, maxHp };
     const next = gameReducer(state, { type: 'recover', useNumber: 1 });
     expect(next.player.hp).toBe(healed);
+    expect(next.recoveryCharges).toBe(2);
     expect(next.player.xp).toBe(state.player.xp);
     expect(next.exercises).toEqual(state.exercises);
     expect(next.currentEnemy).toEqual(state.currentEnemy);
     expect(gameReducer(next, { type: 'recover', useNumber: 1 })).toBe(next);
     expect(gameReducer(next, { type: 'recover', useNumber: 3 })).toBe(next);
-    expect(gameReducer(next, { type: 'enemy_attack' }).player.hp).toBe(Math.max(0, healed - 43));
+    const damage = Math.max(1, state.currentEnemy!.attack - Math.floor(state.player.defense / 2));
+    expect(gameReducer(next, { type: 'enemy_attack' }).player.hp).toBe(healed - damage);
   });
 
-  it('rejects recovery outside a live boss fight and resets its use budget on a new fight', () => {
-    const initial = createGameState();
+  it('rejects full health, empty inventory and non-live fights without consuming charges', () => {
+    const initial = { ...createGameState(), recoveryCharges: 3 };
     expect(gameReducer(initial, { type: 'recover', useNumber: 1 })).toBe(initial);
-    const normal = gameReducer(initial, { type: 'start_battle' });
-    expect(gameReducer(normal, { type: 'recover', useNumber: 1 })).toBe(normal);
-    let boss = gameReducer({ ...initial, currentEnemyIndex: 10 }, { type: 'start_battle' });
-    boss = gameReducer(boss, { type: 'recover', useNumber: 1 });
-    boss = gameReducer(boss, { type: 'recover', useNumber: 2 });
-    expect(gameReducer(boss, { type: 'recover', useNumber: 3 })).toBe(boss);
-    expect(gameReducer(boss, { type: 'start_battle' }).recoveryUses).toBe(0);
+    const battle = gameReducer(initial, { type: 'start_battle' });
+    expect(gameReducer(battle, { type: 'recover', useNumber: 1 })).toBe(battle);
+    const empty = { ...battle, recoveryCharges: 0, player: { ...battle.player, hp: 24 } };
+    expect(gameReducer(empty, { type: 'recover', useNumber: 1 })).toBe(empty);
+    const dead = { ...battle, currentEnemy: { ...battle.currentEnemy!, hp: 0 }, player: { ...battle.player, hp: 24 } };
+    expect(gameReducer(dead, { type: 'recover', useNumber: 1 })).toBe(dead);
+  });
+
+  it('resets the two-use limit each round while retaining the remaining inventory', () => {
+    let state = gameReducer({ ...createGameState(), recoveryCharges: 3 }, { type: 'start_battle' });
+    state.player = { ...state.player, hp: 1 };
+    state = gameReducer(state, { type: 'recover', useNumber: 1 });
+    state = gameReducer(state, { type: 'recover', useNumber: 2 });
+    expect(state.recoveryUses).toBe(2); expect(state.recoveryCharges).toBe(1);
+    expect(gameReducer(state, { type: 'recover', useNumber: 3 })).toBe(state);
+    state = reps(state, 'push-up', 2);
+    state = gameReducer(state, { type: 'round_death_complete', enemyId: 'enemy-1' });
+    state = gameReducer(state, { type: 'next_round', enemyId: 'enemy-1' });
+    expect(state.currentEnemyIndex).toBe(2);
+    expect(state.recoveryUses).toBe(0); expect(state.recoveryCharges).toBe(1);
+    state = gameReducer(state, { type: 'recover', useNumber: 1 });
+    expect(state.recoveryCharges).toBe(0); expect(state.recoveryUses).toBe(1);
+  });
+
+  it.each([['push-up', 5], ['squat', 10], ['jumping-jack', 15]] as const)('earns one charge every %s set of %i correct Training reps', (exercise, target) => {
+    let state = { ...createGameState(), screen: 'workout' as const };
+    let progress = reps(state, exercise, target - 1);
+    expect(progress.recoveryCharges).toBe(0);
+    expect(progress.recoveryTraining[exercise]).toBe(target - 1);
+    progress = applyExerciseEvent(progress, { exercise, status: 'incorrect', timestamp: 1 });
+    expect(progress.recoveryCharges).toBe(0);
+    progress = reps(progress, exercise, 1);
+    expect(progress.recoveryCharges).toBe(1);
+    expect(progress.recoveryTraining[exercise]).toBe(0);
+    progress = reps(progress, exercise, target);
+    expect(progress.recoveryCharges).toBe(2);
+  });
+
+  it('keeps independent partial sets and caps inventory at three without banking extra sets', () => {
+    let state: GameState = { ...createGameState(), screen: 'workout' };
+    state = reps(state, 'push-up', 4); state = reps(state, 'squat', 9); state = reps(state, 'jumping-jack', 14);
+    expect(state.recoveryCharges).toBe(0);
+    for (const exercise of ['push-up', 'squat', 'jumping-jack'] as const) state = reps(state, exercise, 1);
+    expect(state.recoveryCharges).toBe(3);
+    const counters = state.recoveryTraining;
+    state = reps(state, 'push-up', 25);
+    expect(state.recoveryCharges).toBe(3); expect(state.recoveryTraining).toEqual(counters);
+    state = gameReducer(state, { type: 'start_battle' });
+    state.player = { ...state.player, hp: 1 };
+    state = gameReducer(state, { type: 'recover', useNumber: 1 });
+    expect(state.recoveryCharges).toBe(2);
+    state = gameReducer(state, { type: 'set_screen', screen: 'workout' });
+    state = reps(state, 'push-up', 1);
+    expect(state.recoveryCharges).toBe(2); expect(state.recoveryTraining['push-up']).toBe(1);
+  });
+
+  it('does not earn charges from combat reps', () => {
+    let state = gameReducer(createGameState(), { type: 'start_battle' });
+    state.currentEnemy = { ...state.currentEnemy!, hp: 100000, maxHp: 100000 };
+    state = reps(state, 'push-up', 10);
+    expect(state.recoveryCharges).toBe(0);
+    expect(state.recoveryTraining['push-up']).toBe(0);
   });
 
   it('resets all progress on reset action', () => {
