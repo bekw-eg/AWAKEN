@@ -5,6 +5,9 @@
 .combat-announcement.countdown strong { font-size: clamp(90px, 15vw, 220px); }
 .combat-announcement.fight, .combat-announcement.exercise, .combat-announcement.victory { color: var(--accent); }
 .combat-announcement.enemy_turn, .combat-announcement.defeat { color: var(--danger); }
+.combat-announcement.recovery { color: var(--accent); background: radial-gradient(ellipse, rgb(8 20 6 / .8), transparent 80%); }
+.combat-announcement.recovery strong { font-size: clamp(42px, 9vw, 140px); text-shadow: 0 0 40px #c4f36b50, 0 4px 24px #000; }
+.combat-announcement.recovery span { letter-spacing: .12em; }
 .combat-announcement.damage { color: var(--accent); background: radial-gradient(ellipse, rgb(196 243 107 / .13), transparent 70%); }
 .combat-announcement.fight .combat-announcement-impact { animation: combat-impact 700ms ease-out both, combat-jolt 220ms 80ms linear; }
 @keyframes combat-impact { 0% { opacity: 0; transform: scale(1.45); filter: blur(5px); } 20%, 75% { opacity: 1; transform: scale(1); filter: blur(0); } 100% { opacity: .94; transform: scale(.98); filter: blur(0); } }

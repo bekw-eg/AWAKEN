@@ -1,6 +1,22 @@
 import type { ExerciseType } from './types';
 import { DEFAULT_SQUAT_CONFIG } from '../exercise-engine/squatDetector';
 
+export const ROUND_TRANSITION = { deathDurationMs: 600, countdownMs: 5000 } as const;
+export const RECOVERY = {
+  baseHealPercent: 10,
+  healPercentPerRound: 5,
+  maxHealPercent: 50,
+  holdDurationMs: 5000,
+  maxUsesPerFight: 2,
+  maxCharges: 3,
+  maxPoseDrift: 0.045,
+  trainingReps: { 'push-up': 5, squat: 10, 'jumping-jack': 15 },
+} as const;
+
+export function recoveryHealPercent(round: number): number {
+  return Math.min(RECOVERY.maxHealPercent, RECOVERY.baseHealPercent + Math.max(0, round - 1) * RECOVERY.healPercentPerRound);
+}
+
 export const HANDS_FREE_CONFIG = {
   selectionLockMs: 1000,
   squatSelectionCooldownMs: 1200,

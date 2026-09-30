@@ -12,6 +12,7 @@ export function resolvePoseFeedback(input: {
     status: 'correct', regions: input.candidate === 'basic' ? ['legs'] : input.candidate === 'fast' ? ['arms', 'legs'] : ['torso', 'arms'],
   } : NEUTRAL_FORM;
   if (input.phase === 'attack_confirmed') return CORRECT_FORM;
+  if (input.phase === 'recovering') return input.ready ? CORRECT_FORM : NEUTRAL_FORM;
   if (['waiting_for_neutral', 'exercise_prepare', 'exercise_announcement'].includes(input.phase)) return input.ready ? CORRECT_FORM : NEUTRAL_FORM;
   if (input.phase !== 'performing_attack' || !input.selectedAttack) return NEUTRAL_FORM;
   const result = input.selectedAttack === 'basic' ? input.squatResult : input.selectedAttack === 'fast' ? input.jumpingJackResult : input.pushupResult;

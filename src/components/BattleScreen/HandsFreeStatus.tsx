@@ -1,16 +1,21 @@
 import type { BattleSnapshot } from '../../game/handsFreeBattleController';
-import { HANDS_FREE_ATTACKS, HANDS_FREE_CONFIG, type AttackType } from '../../game/handsFreeConfig';
+import { RECOVERY, HANDS_FREE_ATTACKS, HANDS_FREE_CONFIG, type AttackType } from '../../game/handsFreeConfig';
 
-export function HandsFreeStatus({ battle, debug = false }: { battle: BattleSnapshot; debug?: boolean }) {
+export function HandsFreeStatus({ battle, debug = false }: {
+  battle: BattleSnapshot; debug?: boolean;
+}) {
   const attack = battle.selectedAttack ? HANDS_FREE_ATTACKS[battle.selectedAttack] : null;
   const { phase } = battle;
-  const title = phase === 'camera_setup' ? 'WAITING FOR PLAYER' : phase === 'battle_intro' ? 'PLAYER DETECTED' : phase === 'battle_fight' ? 'FIGHT!' :
+  const title = phase === 'recovering' ? 'RECOVERY MODE' : phase === 'resolving_recovery' ? 'RECOVERY COMPLETE' :
+    phase === 'camera_setup' ? 'WAITING FOR PLAYER' : phase === 'battle_intro' ? 'PLAYER DETECTED' : phase === 'battle_fight' ? 'FIGHT!' :
     phase === 'selecting_attack' ? 'SELECT YOUR ATTACK' : phase === 'attack_confirmed' ? `${attack?.name} ATTACK SELECTED` :
     phase === 'waiting_for_neutral' || phase === 'exercise_prepare' || phase === 'exercise_announcement' || phase === 'turn_prepare' ? 'GET READY' :
     phase === 'performing_attack' ? battle.go ? 'GO!' : `${attack?.name} ATTACK` :
     phase === 'resolving_attack' ? `${attack?.name} ATTACK · HIT!` : phase === 'enemy_turn' ? 'ENEMY TURN' : phase.toUpperCase();
-  const guidance = phase === 'camera_setup' ? 'Allow your camera and show your full body.' : phase === 'battle_intro' ? 'BATTLE START' :
-    phase === 'selecting_attack' ? 'MOVE YOUR BODY TO SELECT' : phase === 'attack_confirmed' ? 'Selection complete. The next reps power your attack.' :
+  const guidance = phase === 'recovering' ? 'Stand upright with your arms down. Move to cancel and choose an attack.' :
+    phase === 'resolving_recovery' ? `+${battle.recoveryHealedHp} HP · ENEMY PREPARES TO STRIKE` :
+    phase === 'camera_setup' ? 'Allow your camera and show your full body.' : phase === 'battle_intro' ? 'BATTLE START' :
+    phase === 'selecting_attack' ? 'MOVE TO ATTACK · STAND STILL TO RECOVER' : phase === 'attack_confirmed' ? 'Selection complete. The next reps power your attack.' :
     phase === 'waiting_for_neutral' || phase === 'exercise_prepare' || phase === 'exercise_announcement' ? attack?.neutral :
     phase === 'performing_attack' ? attack?.movement : phase === 'turn_prepare' ? 'Your next move is coming.' :
     phase === 'enemy_turn' ? 'Enemy attacks automatically.' : null;
@@ -18,6 +23,10 @@ export function HandsFreeStatus({ battle, debug = false }: { battle: BattleSnaps
     <p className="eyebrow">THE BODY IS THE CONTROLLER</p>
     <div role="status" aria-live="polite" aria-atomic="true"><h2>{title}</h2><p>{guidance}</p></div>
     {battle.countdown > 0 && <strong className="hands-free-countdown" aria-label={`Countdown ${battle.countdown}`}>{battle.countdown}</strong>}
+    {phase === 'recovering' && <div className="recovery-progress">
+      <strong>RECOVERY {(battle.recoveryHoldMs / 1000).toFixed(1)} / 5.0 SEC</strong>
+      <progress aria-label="Recovery hold" value={battle.recoveryHoldMs} max={RECOVERY.holdDurationMs} />
+    </div>}
     {phase === 'waiting_for_neutral' && <div className="neutral-readiness">
       <span>START POSITION · {Math.round(battle.neutralProgress * 100)}%</span>
       <progress aria-label="Starting position readiness" value={battle.neutralProgress} max={1} />
@@ -30,8 +39,14 @@ export function HandsFreeStatus({ battle, debug = false }: { battle: BattleSnaps
         <small>{battle.candidate === key ? `DETECTING ${HANDS_FREE_ATTACKS[key].name}…` : `Then ${HANDS_FREE_ATTACKS[key].reps} new ${HANDS_FREE_ATTACKS[key].movement.toLowerCase()}`}</small>
         {key === 'strong' && <progress aria-label="Strong stance hold" value={battle.pushupHoldMs} max={HANDS_FREE_CONFIG.pushupPoseHoldMs} />}
       </div>)}
+      <div className="gesture-choice recovery-choice" aria-label="Recovery" aria-disabled={!battle.recoveryAvailable}>
+        <strong>RECOVER — Hold</strong>
+        <span>{battle.recoveryUsesLeft === 0 ? 'FIGHT LIMIT REACHED' : battle.recoveryCharges === 0 ? 'NO CHARGES · EARN IN TRAINING' :
+          battle.recoveryFullHp ? 'HP FULL · CHARGES SAVED' : `STAND STILL 5 SEC · +${battle.recoveryPercent}% MAX HP`}</span>
+        <small>{battle.recoveryCharges} / {RECOVERY.maxCharges} CHARGES · {battle.recoveryUsesLeft} / {RECOVERY.maxUsesPerFight} USES LEFT THIS FIGHT</small>
+      </div>
     </div>}
-    {['selecting_attack', 'waiting_for_neutral', 'exercise_prepare', 'exercise_announcement', 'performing_attack'].includes(phase) &&
+    {['selecting_attack', 'waiting_for_neutral', 'exercise_prepare', 'exercise_announcement', 'performing_attack', 'recovering'].includes(phase) &&
       <p className={`hands-free-hint${battle.formError ? ' form-error' : ''}`} role="status">
         {!battle.tracking ? 'TRACKING LOST · Show your full body in the camera' : battle.formError ? `FORM ERROR · ${battle.feedback}` : battle.feedback}
       </p>}

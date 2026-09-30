@@ -1,9 +1,11 @@
 import { createGameState, EXERCISES } from './progression';
 import type { ExerciseProgress, GameState, PlayerState, QuestObjective } from './types';
+import { RECOVERY } from './handsFreeConfig';
 
 export const PROGRESS_STORAGE_KEY = 'awaken.progress';
 const SAVE_VERSION = 1;
-type Progress = Pick<GameState, 'player' | 'exercises' | 'currentEnemyIndex' | 'dailyQuest'>;
+type Progress = Pick<GameState, 'player' | 'exercises' | 'currentEnemyIndex' | 'dailyQuest'> &
+  Partial<Pick<GameState, 'recoveryCharges' | 'recoveryTraining'>>;
 const playerFields = ['level', 'xp', 'xpToNextLevel', 'strength', 'endurance', 'agility', 'power',
   'vitality', 'defense', 'stamina', 'hp', 'maxHp', 'gold'] as const satisfies readonly (keyof PlayerState)[];
 
@@ -29,7 +31,12 @@ function isObjective(value: unknown): value is QuestObjective {
 function isProgress(value: unknown): value is Progress {
   if (!isRecord(value) || !isPlayer(value.player) || !isRecord(value.exercises) || !isRecord(value.dailyQuest)) return false;
   const { exercises, dailyQuest } = value;
-  return EXERCISES.every(({ exercise }) => isExerciseProgress(exercises[exercise])) &&
+  const validRecovery = (value.recoveryCharges === undefined || isCount(value.recoveryCharges) && value.recoveryCharges <= RECOVERY.maxCharges) &&
+    (value.recoveryTraining === undefined || isRecord(value.recoveryTraining) && EXERCISES.every(({ exercise }) => {
+      const count = (value.recoveryTraining as Record<string, unknown>)[exercise];
+      return isCount(count) && count < RECOVERY.trainingReps[exercise];
+    }));
+  return validRecovery && EXERCISES.every(({ exercise }) => isExerciseProgress(exercises[exercise])) &&
     isCount(value.currentEnemyIndex) && value.currentEnemyIndex >= 1 && value.currentEnemyIndex <= 10 &&
     Array.isArray(dailyQuest.objectives) && dailyQuest.objectives.length === EXERCISES.length &&
     dailyQuest.objectives.every(isObjective) &&
@@ -41,9 +48,9 @@ function isProgress(value: unknown): value is Progress {
 /** Only durable progress is stored. Camera frames, navigation and combat timers never are. */
 export function saveProgress(progress: Progress): boolean {
   try {
-    const { player, exercises, currentEnemyIndex, dailyQuest } = progress;
+    const { player, exercises, currentEnemyIndex, dailyQuest, recoveryCharges, recoveryTraining } = progress;
     window.localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify({
-      version: SAVE_VERSION, progress: { player, exercises, currentEnemyIndex, dailyQuest },
+      version: SAVE_VERSION, progress: { player, exercises, currentEnemyIndex, dailyQuest, recoveryCharges, recoveryTraining },
     }));
     return true;
   } catch {
@@ -59,8 +66,10 @@ export function loadProgress(): GameState {
     if (!raw) return initial;
     const saved: unknown = JSON.parse(raw);
     if (!isRecord(saved) || saved.version !== SAVE_VERSION || !isProgress(saved.progress)) return initial;
-    const { player, exercises, currentEnemyIndex, dailyQuest } = saved.progress;
-    return { ...initial, player, exercises, currentEnemyIndex, dailyQuest };
+    const { player, exercises, currentEnemyIndex, dailyQuest, recoveryCharges, recoveryTraining } = saved.progress;
+    return { ...initial, player, exercises, currentEnemyIndex, dailyQuest,
+      recoveryCharges: recoveryCharges ?? initial.recoveryCharges,
+      recoveryTraining: recoveryTraining ?? initial.recoveryTraining };
   } catch {
     return initial;
   }

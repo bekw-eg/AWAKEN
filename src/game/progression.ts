@@ -1,4 +1,5 @@
 import type { ExerciseEvent, ExerciseType, GameState, PlayerState, Enemy, ExerciseProgress } from './types';
+import { RECOVERY, recoveryHealPercent } from './handsFreeConfig';
 
 export const REP_XP = 15;
 export const LEVEL_XP_BASE = 100;
@@ -29,6 +30,10 @@ export function generateEnemy(index: number): Enemy {
 export function createGameState(): GameState {
   return {
     screen: 'main',
+    roundPhase: 'active',
+    recoveryUses: 0,
+    recoveryCharges: 0,
+    recoveryTraining: { 'push-up': 0, squat: 0, 'jumping-jack': 0 },
     player: { 
       level: 1, xp: 0, xpToNextLevel: LEVEL_XP_BASE, 
       strength: 10, endurance: 10, agility: 10, power: 10, vitality: 10, defense: 5, stamina: 10,
@@ -75,6 +80,7 @@ export function addExerciseXp(progress: ExerciseProgress, amount: number): Exerc
 }
 
 export function applyExerciseEvent(state: GameState, event: ExerciseEvent): GameState {
+  if (state.screen === 'battle' && (state.roundPhase !== 'active' || !state.currentEnemy || state.currentEnemy.hp <= 0)) return state;
   if (event.status !== 'correct') return state;
   const definition = EXERCISES.find(({ exercise }) => exercise === event.exercise);
   if (!definition) return state;
@@ -105,7 +111,8 @@ export function applyExerciseEvent(state: GameState, event: ExerciseEvent): Game
       if (newState.currentEnemy.isBoss) {
         newState.currentEnemyIndex = 1; // reset to 1 for next stage, or we could just go to 11
       } else {
-        newState.currentEnemyIndex++;
+        newState.roundPhase = 'enemy_defeated';
+        return newState;
       }
       newState.currentEnemy = null;
       newState.screen = 'main';
@@ -113,6 +120,14 @@ export function applyExerciseEvent(state: GameState, event: ExerciseEvent): Game
     }
   } else if (newState.screen === 'workout') {
     newState.player = addPlayerXp(newState.player, REP_XP);
+    // Each exercise earns charges independently. A full inventory cannot bank
+    // extra completed sets; partial sets are retained until there is room.
+    if (newState.recoveryCharges < RECOVERY.maxCharges) {
+      const progress = newState.recoveryTraining[event.exercise] + 1;
+      const earned = progress >= RECOVERY.trainingReps[event.exercise];
+      newState.recoveryTraining = { ...newState.recoveryTraining, [event.exercise]: earned ? 0 : progress };
+      if (earned) newState.recoveryCharges++;
+    }
     
     // Handle daily quest
     const objectives = newState.dailyQuest.objectives.map((objective) => {
@@ -141,6 +156,9 @@ export type GameAction =
   | { type: 'reset' }
   | { type: 'set_screen'; screen: GameState['screen'] }
   | { type: 'start_battle' }
+  | { type: 'round_death_complete'; enemyId: string }
+  | { type: 'next_round'; enemyId: string }
+  | { type: 'recover'; useNumber: number }
   | { type: 'enemy_attack' };
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
@@ -150,11 +168,26 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'exercise':
       return applyExerciseEvent(state, action.event);
     case 'set_screen':
-      return { ...state, screen: action.screen };
+      return { ...state, screen: action.screen,
+        currentEnemyIndex: state.currentEnemyIndex + (state.roundPhase !== 'active' ? 1 : 0), roundPhase: 'active' };
     case 'start_battle':
-      return { ...state, screen: 'battle', currentEnemy: generateEnemy(state.currentEnemyIndex) };
+      return { ...state, screen: 'battle', roundPhase: 'active', recoveryUses: 0, currentEnemy: generateEnemy(state.currentEnemyIndex) };
+    case 'round_death_complete':
+      if (state.screen !== 'battle' || state.roundPhase !== 'enemy_defeated' || state.currentEnemy?.id !== action.enemyId) return state;
+      return { ...state, roundPhase: 'round_transition' };
+    case 'next_round': {
+      if (state.screen !== 'battle' || state.roundPhase !== 'round_transition' || state.currentEnemy?.id !== action.enemyId) return state;
+      const currentEnemyIndex = state.currentEnemyIndex + 1;
+      return { ...state, currentEnemyIndex, currentEnemy: generateEnemy(currentEnemyIndex), roundPhase: 'active', recoveryUses: 0 };
+    }
+    case 'recover':
+      if (state.screen !== 'battle' || state.roundPhase !== 'active' || !state.currentEnemy || state.currentEnemy.hp <= 0 ||
+        state.player.hp <= 0 || state.player.hp >= state.player.maxHp || state.recoveryCharges <= 0 ||
+        action.useNumber !== state.recoveryUses + 1 || action.useNumber > RECOVERY.maxUsesPerFight) return state;
+      return { ...state, recoveryUses: action.useNumber, recoveryCharges: state.recoveryCharges - 1, player: { ...state.player,
+        hp: Math.min(state.player.maxHp, state.player.hp + Math.round(state.player.maxHp * recoveryHealPercent(state.currentEnemyIndex) / 100)) } };
     case 'enemy_attack': {
-      if (state.screen !== 'battle' || !state.currentEnemy) return state;
+      if (state.screen !== 'battle' || !state.currentEnemy || state.currentEnemy.hp <= 0 || state.roundPhase !== 'active') return state;
       const damage = Math.max(1, state.currentEnemy.attack - Math.floor(state.player.defense / 2));
       const playerHp = Math.max(0, state.player.hp - damage);
       let nextState = { ...state, player: { ...state.player, hp: playerHp } };

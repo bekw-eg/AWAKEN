@@ -16,7 +16,8 @@ function trainedState() {
   }
   state = gameReducer(state, { type: 'start_battle' });
   state = gameReducer(state, { type: 'enemy_attack' });
-  while (state.screen === 'battle') state = gameReducer(state, { type: 'exercise', event: rep('push-up') });
+  while (state.currentEnemy!.hp > 0) state = gameReducer(state, { type: 'exercise', event: rep('push-up') });
+  state = gameReducer(state, { type: 'set_screen', screen: 'main' });
   return state;
 }
 
@@ -47,7 +48,7 @@ it('returns to the main screen after a mid-battle reload without restoring attac
   act(() => first.result.current.handleExerciseEvent(rep('squat')));
   expect(first.result.current.player.hp).toBe(96);
   const saved = JSON.parse(window.localStorage.getItem(PROGRESS_STORAGE_KEY)!);
-  expect(Object.keys(saved.progress).sort()).toEqual(['currentEnemyIndex', 'dailyQuest', 'exercises', 'player']);
+  expect(Object.keys(saved.progress).sort()).toEqual(['currentEnemyIndex', 'dailyQuest', 'exercises', 'player', 'recoveryCharges', 'recoveryTraining']);
   first.unmount();
   const second = renderHook(useGameState);
   expect(second.result.current.screen).toBe('main');
@@ -66,6 +67,49 @@ it('persists a reset so old statistics do not reappear', () => {
   act(() => first.result.current.resetGame());
   first.unmount();
   expect(loadProgress()).toEqual(createGameState());
+});
+
+it('retains recovery inventory and partial Training sets, including charge spending after reload', () => {
+  const first = renderHook(useGameState);
+  act(() => first.result.current.setScreen('workout'));
+  for (let n = 0; n < 7; n++) act(() => first.result.current.handleExerciseEvent(rep('push-up')));
+  expect(first.result.current.recoveryCharges).toBe(1);
+  expect(first.result.current.recoveryTraining['push-up']).toBe(2);
+  act(() => first.result.current.startBattle());
+  act(() => first.result.current.enemyAttack());
+  act(() => first.result.current.recover(1));
+  expect(first.result.current.recoveryCharges).toBe(0);
+  first.unmount();
+  const second = renderHook(useGameState);
+  expect(second.result.current.recoveryCharges).toBe(0);
+  expect(second.result.current.recoveryTraining['push-up']).toBe(2);
+  expect(second.result.current.recoveryUses).toBe(0);
+});
+
+it('loads older saves with an empty recovery inventory without losing existing progress', () => {
+  const state = trainedState();
+  saveProgress(state);
+  const saved = JSON.parse(window.localStorage.getItem(PROGRESS_STORAGE_KEY)!);
+  delete saved.progress.recoveryCharges;
+  delete saved.progress.recoveryTraining;
+  window.localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(saved));
+  expect(loadProgress()).toMatchObject({ player: state.player, currentEnemyIndex: 2, recoveryCharges: 0,
+    recoveryTraining: { 'push-up': 0, squat: 0, 'jumping-jack': 0 } });
+});
+
+it('resumes at the next round after reloading during a victory menu without replaying rewards', () => {
+  const first = renderHook(useGameState);
+  act(() => first.result.current.startBattle());
+  act(() => first.result.current.handleExerciseEvent(rep('push-up')));
+  act(() => first.result.current.handleExerciseEvent(rep('push-up')));
+  expect(first.result.current.roundPhase).toBe('enemy_defeated');
+  const xp = first.result.current.player.xp;
+  first.unmount();
+  const second = renderHook(useGameState);
+  expect(second.result.current.currentEnemyIndex).toBe(2);
+  expect(second.result.current.player.xp).toBe(xp);
+  act(() => second.result.current.startBattle());
+  expect(second.result.current.currentEnemy?.id).toBe('enemy-2');
 });
 
 it('does not write progress on navigation or unchanged renders', () => {
@@ -95,6 +139,8 @@ it.each([
   (state: GameState) => { state.dailyQuest.objectives[1] = state.dailyQuest.objectives[0]; },
   (state: GameState) => { state.dailyQuest.objectives[0].completed = true; },
   (state: GameState) => { state.dailyQuest.rewardClaimed = true; },
+  (state: GameState) => { state.recoveryCharges = 4; },
+  (state: GameState) => { state.recoveryTraining['push-up'] = 5; },
 ])('rejects malformed or inconsistent progress (%#)', mutate => {
   const state = createGameState();
   mutate(state);

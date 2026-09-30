@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HandsFreeBattleController, type BattleCommand } from '../game/handsFreeBattleController';
-import { HANDS_FREE_CONFIG as C } from '../game/handsFreeConfig';
+import { RECOVERY, recoveryHealPercent, HANDS_FREE_CONFIG as C } from '../game/handsFreeConfig';
 import { isPushupReadyPose, isStandingPose, standingPoseFeedback } from '../game/handsFreePoses';
 import type { PushUpFrame } from '../exercise-engine/pushUpTypes';
 import { SquatSequence, squatFrame } from './fixtures/squatFrames';
@@ -10,14 +10,21 @@ import { battleOverlay } from '../game/battleOverlay';
 
 type Pose = Omit<PushUpFrame, 'timestampMs'>;
 export class BattleSequence {
-  controller = new HandsFreeBattleController();
+  controller: HandsFreeBattleController;
+  constructor(readonly round = 1) { this.controller = new HandsFreeBattleController(round); }
   now = 0;
   commands: BattleCommand[] = [];
-  health = { playerHp: 100, enemyHp: 1000 };
+  health = { playerHp: 100, playerMaxHp: 100, enemyHp: 1000, recoveryCharges: 0, recoveryUses: 0 };
   get state() { return this.controller.snapshot(this.now); }
   frame(pose: Pose) {
     this.now += 50;
-    this.commands.push(...this.controller.advance(this.now, this.health, { ...pose, timestampMs: this.now }));
+    const commands = this.controller.advance(this.now, this.health, { ...pose, timestampMs: this.now });
+    this.commands.push(...commands);
+    for (const command of commands) if (command.type === 'recover') {
+      this.health.recoveryUses = command.useNumber;
+      this.health.recoveryCharges--;
+      this.health.playerHp = Math.min(this.health.playerMaxHp, this.health.playerHp + Math.round(this.health.playerMaxHp * recoveryHealPercent(this.round) / 100));
+    }
   }
   hold(pose: Pose, ms: number) { for (let t = 0; t < ms; t += 50) this.frame(pose); }
   start(pose: Pose = closedFrame) { this.hold(pose, C.introCountdownMs + C.fightAnnouncementMs + 100); expect(this.state.phase).toBe('selecting_attack'); }
@@ -32,6 +39,105 @@ export class BattleSequence {
   pushup(bottom = 85) { const s = new PushUpSequence(); s.rep(bottom); s.frames.forEach(f => this.frame(f)); }
   get attacks() { return this.commands.filter(c => c.type === 'attack'); }
 }
+
+describe('hands-free recovery turns', () => {
+  const ready = (round = 1) => {
+    const s = new BattleSequence(round); s.start(squatFrame(0));
+    s.health.playerHp = 24; s.health.recoveryCharges = 3;
+    s.frame(squatFrame(0));
+    expect(s.state.phase).toBe('recovering');
+    return s;
+  };
+
+  it.each([1, 5, 10])('automatically announces five seconds in round %i and consumes one charge', round => {
+    const s = ready(round);
+    for (const number of [5, 4, 3, 2, 1]) {
+      expect(battleOverlay(s.state)?.text).toBe('RECOVERY IN ' + number);
+      expect(s.commands).toEqual([]);
+      s.hold(squatFrame(0), 1000);
+    }
+    expect(s.commands).toEqual([{ type: 'recover', useNumber: 1 }]);
+    expect(s.state.phase).toBe('resolving_recovery');
+    expect(s.state.recoveryHealedHp).toBe(recoveryHealPercent(round));
+    expect(s.health.recoveryCharges).toBe(2);
+    s.hold(squatFrame(0), C.resolveMs);
+    expect(s.commands).toEqual([{ type: 'recover', useNumber: 1 }, { type: 'enemy_attack' }]);
+    s.hold(squatFrame(0), C.enemyTurnMs);
+    expect(s.commands).toHaveLength(2);
+  });
+
+  it.each(['empty', 'full', 'limit'] as const)('does not start or spend a charge when %s', reason => {
+    const s = new BattleSequence(); s.start();
+    s.health.playerHp = reason === 'full' ? 100 : 24;
+    s.health.recoveryCharges = reason === 'empty' ? 0 : 3;
+    s.health.recoveryUses = reason === 'limit' ? 2 : 0;
+    s.hold(squatFrame(0), 7000);
+    expect(s.state.phase).toBe('selecting_attack');
+    expect(s.commands).toEqual([]);
+  });
+
+  it('resets on movement and missing frames and never banks time from duplicate or stale frames', () => {
+    const s = ready(); s.hold(squatFrame(0), 2000);
+    expect(s.state.recoveryHoldMs).toBe(2000);
+    s.frame(openFrame);
+    expect(s.state.phase).toBe('selecting_attack');
+    expect(s.state.recoveryHoldMs).toBe(0);
+    s.frame(squatFrame(0)); s.hold(squatFrame(0), 1000);
+    s.frame({ landmarks: null, worldLandmarks: null });
+    expect(s.state.recoveryHoldMs).toBe(0);
+    s.frame(squatFrame(0));
+    const duplicate = { ...squatFrame(0), timestampMs: s.now };
+    s.now += 300; s.commands.push(...s.controller.advance(s.now, s.health, duplicate));
+    expect(s.state.recoveryHoldMs).toBe(0);
+    s.now += 2000; s.commands.push(...s.controller.advance(s.now, s.health));
+    expect(s.state.phase).toBe('selecting_attack');
+    expect(s.commands).toEqual([]); expect(s.health.recoveryCharges).toBe(3);
+    s.frame(squatFrame(0)); s.hold(squatFrame(0), 4950);
+    expect(s.commands).toEqual([]);
+    s.frame(squatFrame(0));
+    expect(s.commands).toEqual([{ type: 'recover', useNumber: 1 }]);
+  });
+
+  it('cancels a standing but moving pose', () => {
+    const s = ready(); s.hold(squatFrame(0), 2000);
+    const moved = squatFrame(0);
+    moved.landmarks = moved.landmarks!.map(point => ({ ...point, x: point.x + .06 }));
+    s.frame(moved);
+    expect(s.state.phase).toBe('selecting_attack');
+    expect(s.state.recoveryHoldMs).toBe(0); expect(s.commands).toEqual([]);
+  });
+
+  it.each(['basic', 'fast', 'strong'] as const)('lets movement cancel recovery and select the %s attack', attack => {
+    const s = ready(); s.hold(squatFrame(0), 1700);
+    if (attack === 'basic') s.squat();
+    else if (attack === 'fast') s.jack();
+    else s.hold(pushUpFrame(0), 800);
+    expect(s.state.selectedAttack).toBe(attack);
+    expect(s.commands).toEqual([]); expect(s.health.recoveryCharges).toBe(3);
+  });
+
+  it('allows two consecutive recovery turns without cooldown, but never a third', () => {
+    const s = ready();
+    for (const useNumber of [1, 2]) {
+      s.hold(squatFrame(0), RECOVERY.holdDurationMs);
+      expect(s.commands.at(-1)).toEqual({ type: 'recover', useNumber });
+      s.hold(squatFrame(0), C.resolveMs + C.enemyTurnMs + C.betweenTurnsMs);
+      s.frame(squatFrame(0));
+    }
+    expect(s.state.phase).toBe('selecting_attack');
+    expect(s.health.recoveryCharges).toBe(1);
+    expect(s.state.recoveryUsesLeft).toBe(0);
+    s.hold(squatFrame(0), 6000);
+    expect(s.commands.filter(command => command.type === 'recover')).toHaveLength(2);
+  });
+
+  it.each(['playerHp', 'enemyHp'] as const)('stops pending recovery when %s reaches zero', key => {
+    const s = ready(); s.hold(squatFrame(0), 4000); s.health[key] = 0;
+    s.hold(squatFrame(0), 6000);
+    expect(s.commands).toEqual([]);
+    expect(s.state.phase).toBe(key === 'playerHp' ? 'defeat' : 'victory');
+  });
+});
 
 describe('hands-free orchestration using the real exercise detectors', () => {
   it('announces 3, 2, 1, FIGHT before enabling gesture selection', () => {
