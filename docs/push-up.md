@@ -6,7 +6,7 @@
 - `src/exercise-engine/pushUpDetector.ts`: pure TypeScript, no React or game dependencies.
 - `src/hooks/usePushUpExercise.ts`: one detector per mount, consumes the existing pose frames; no additional MediaPipe instance or animation loop.
 - `src/components/PushUpFeedback/`: setup instructions, valid reps, phase, side, one prioritized error and collapsed debug metrics.
-- `CameraView`: Squat / Push-Up selector; inactive detectors pause and retain their counters.
+- `CameraView`: Squat / Jumping Jack / Push-Up selector; inactive detectors pause and retain their counters on the current screen.
 - Tests: detector, hook, feedback and mode integration; fixtures construct articulated arms with grounded wrists and ankles.
 
 Use `PushUpDetector.update(frame)`, `pause()` and `reset()` directly or use the hook:
@@ -16,12 +16,12 @@ const pushUp = usePushUpExercise(
   landmarks, worldLandmarks, poseTimestampMs, enabled,
   undefined, videoSize.width / videoSize.height,
 );
-// Consume pushUp.repJustCounted in the future Strong Attack integration.
+// CameraView forwards pushUp.repJustCounted through useSquatGameEvents as a push-up event.
 ```
 
 `repJustCounted` is true only on the update that completes a valid rep. The next update, including duplicate/out-of-order timestamps, clears it. In React consume it in an effect, with `repCount` as the rep identity; do not trigger side effects during render. A hook render does not itself constitute a new pose frame. Reset starts a new counter session.
 
-One valid rep can later trigger one Strong Attack. No attack event, Strength, damage, HP or turn logic is implemented here. No game files were changed.
+One valid rep triggers one Strong Attack in battle, or training XP and objective progress in Training. CameraView emits the exercise event; the game reducer owns Strength, damage, HP and rewards. These rules stay separate from the detector.
 
 ## Detection
 
