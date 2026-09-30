@@ -165,6 +165,8 @@ export class JumpingJackDetector {
       if ([lm, wlm].some(point => !point || ![point.x, point.y, point.z].every(Number.isFinite)
         || !Number.isFinite(point.visibility ?? 1) || (point.visibility ?? 1) < minVis
         || !Number.isFinite(point.presence ?? 1) || (point.presence ?? 1) < this.config.minPresence)) return false;
+      // Confidence alone does not prove a joint is inside the camera image.
+      if (lm.x < 0 || lm.x > 1 || lm.y < 0 || lm.y > 1) return false;
     }
 
     // Normalized Ankle Width Ratio using world landmarks

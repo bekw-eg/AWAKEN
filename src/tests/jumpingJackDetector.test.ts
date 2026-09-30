@@ -56,6 +56,27 @@ describe('JumpingJackDetector', () => {
     expect(result.repCount).toBe(0);
   });
 
+  it.each([{ x: -0.1 }, { x: 1.1 }, { y: -0.1 }, { y: 1.1 }])(
+    'rejects a confidently estimated wrist outside the image: %j', (position) => {
+      const landmarks = openFrame.landmarks.map(point => ({ ...point }));
+      landmarks[15] = { ...landmarks[15], ...position };
+      const result = detector.update({ ...openFrame, landmarks, timestampMs: 50 });
+      expect(result.trackingStatus).toBe('unreliable');
+      expect(result.repCount).toBe(0);
+    },
+  );
+
+  it('requires an observed open pose before counting after off-screen hands', () => {
+    updateWithHold(closedFrame, 0, 200);
+    const landmarks = openFrame.landmarks.map(point => ({ ...point }));
+    landmarks[15].y = -0.1;
+    landmarks[16].y = -0.1;
+    updateWithHold({ ...openFrame, landmarks }, 250, 350);
+    expect(updateWithHold(closedFrame, 650, 350).repCount).toBe(0);
+    updateWithHold(openFrame, 1050, 350);
+    expect(updateWithHold(closedFrame, 1450, 350).repCount).toBe(1);
+  });
+
   it('руки недостаточно высоко -> rep не засчитан', () => {
     updateWithHold(closedFrame, 0, 200);
     
