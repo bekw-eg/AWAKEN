@@ -1,5 +1,6 @@
 import type { BattleSnapshot } from '../../game/handsFreeBattleController';
 import { RECOVERY, HANDS_FREE_ATTACKS, HANDS_FREE_CONFIG, type AttackType } from '../../game/handsFreeConfig';
+import { EXERCISE_DAMAGE } from '../../game/exerciseDamage';
 
 export function HandsFreeStatus({ battle, debug = false }: {
   battle: BattleSnapshot; debug?: boolean;
@@ -10,14 +11,14 @@ export function HandsFreeStatus({ battle, debug = false }: {
     phase === 'camera_setup' ? 'WAITING FOR PLAYER' : phase === 'battle_intro' ? 'PLAYER DETECTED' : phase === 'battle_fight' ? 'FIGHT!' :
     phase === 'selecting_attack' ? 'SELECT YOUR ATTACK' : phase === 'attack_confirmed' ? `${attack?.name} ATTACK SELECTED` :
     phase === 'waiting_for_neutral' || phase === 'exercise_prepare' || phase === 'exercise_announcement' || phase === 'turn_prepare' ? 'GET READY' :
-    phase === 'performing_attack' ? battle.go ? 'GO!' : `${attack?.name} ATTACK` :
-    phase === 'resolving_attack' ? `${attack?.name} ATTACK · HIT!` : phase === 'enemy_turn' ? 'ENEMY TURN' : phase.toUpperCase();
+    phase === 'performing_attack' ? battle.go ? 'GO!' : attack?.movement :
+    phase === 'resolving_attack' ? `${attack?.name} ATTACK · ${battle.accumulatedDamage > 0 ? 'HIT!' : 'NO DAMAGE'}` : phase === 'enemy_turn' ? 'ENEMY TURN' : phase.toUpperCase();
   const guidance = phase === 'recovering' ? 'Stand upright with your arms down. Move to cancel and choose an attack.' :
     phase === 'resolving_recovery' ? `+${battle.recoveryHealedHp} HP · YOUR TURN · CHOOSE AN ATTACK` :
     phase === 'camera_setup' ? 'Allow your camera and show your full body.' : phase === 'battle_intro' ? 'BATTLE START' :
     phase === 'selecting_attack' ? 'MOVE TO ATTACK · STAND STILL TO RECOVER' : phase === 'attack_confirmed' ? 'Selection complete. The next reps power your attack.' :
     phase === 'waiting_for_neutral' || phase === 'exercise_prepare' || phase === 'exercise_announcement' ? attack?.neutral :
-    phase === 'performing_attack' ? attack?.movement : phase === 'turn_prepare' ? 'Your next move is coming.' :
+    phase === 'performing_attack' ? `${attack?.movement} · Every correct rep adds damage.` : phase === 'turn_prepare' ? 'Your next move is coming.' :
     phase === 'enemy_turn' ? 'Enemy attacks automatically.' : null;
   return <section className="hands-free-status" aria-label="Hands-free battle" data-phase={phase}>
     <p className="eyebrow">THE BODY IS THE CONTROLLER</p>
@@ -31,12 +32,20 @@ export function HandsFreeStatus({ battle, debug = false }: {
       <span>START POSITION · {Math.round(battle.neutralProgress * 100)}%</span>
       <progress aria-label="Starting position readiness" value={battle.neutralProgress} max={1} />
     </div>}
-    {attack && ['performing_attack', 'resolving_attack'].includes(phase) &&
-      <strong className="hands-free-countdown" aria-live="polite" aria-label="Attack repetitions">{battle.reps} / {attack.reps}</strong>}
+    {attack && ['performing_attack', 'resolving_attack'].includes(phase) && <div className="attack-progress">
+      <div className="attack-totals" role="status" aria-live="polite" aria-atomic="true">
+        <div><strong aria-label="Attack repetitions">{battle.reps}</strong><span>REPS</span></div>
+        <div><strong key={battle.reps} className={battle.reps > 0 ? 'damage-total' : ''} aria-label="Accumulated damage">{battle.accumulatedDamage}</strong><span>DAMAGE</span></div>
+      </div>
+      <div className="rep-damage-feedback" aria-hidden="true">
+        {phase === 'performing_attack' && battle.reps > 0 && <span key={battle.reps}>+{EXERCISE_DAMAGE[attack.exercise]} DMG</span>}
+      </div>
+      {phase === 'performing_attack' && <p className="attack-time" aria-label="Set time remaining">{battle.attackSecondsLeft} SEC LEFT · AUTO ATTACK AT 0</p>}
+    </div>}
     {phase === 'selecting_attack' && <div className="gesture-choices" aria-label="Attack gestures">
       {(Object.keys(HANDS_FREE_ATTACKS) as AttackType[]).map(key => <div key={key} className={`gesture-choice${battle.candidate === key ? ' detecting' : ''}`}>
         <strong>{HANDS_FREE_ATTACKS[key].name}</strong><span>{HANDS_FREE_ATTACKS[key].selection}</span>
-        <small>{battle.candidate === key ? `DETECTING ${HANDS_FREE_ATTACKS[key].name}…` : `Then ${HANDS_FREE_ATTACKS[key].reps} new ${HANDS_FREE_ATTACKS[key].movement.toLowerCase()}`}</small>
+        <small>{battle.candidate === key ? `DETECTING ${HANDS_FREE_ATTACKS[key].name}…` : `${EXERCISE_DAMAGE[HANDS_FREE_ATTACKS[key].exercise]} DMG / REP · ${HANDS_FREE_CONFIG.attackDurationMs / 1000} SEC SET`}</small>
         {key === 'strong' && <progress aria-label="Strong stance hold" value={battle.pushupHoldMs} max={HANDS_FREE_CONFIG.pushupPoseHoldMs} />}
       </div>)}
       <div className="gesture-choice recovery-choice" aria-label="Recovery" aria-disabled={!battle.recoveryAvailable}>

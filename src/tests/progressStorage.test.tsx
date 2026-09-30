@@ -16,7 +16,7 @@ function trainedState() {
   }
   state = gameReducer(state, { type: 'start_battle' });
   state = gameReducer(state, { type: 'enemy_attack' });
-  while (state.currentEnemy!.hp > 0) state = gameReducer(state, { type: 'exercise', event: rep('push-up') });
+  state = gameReducer(state, { type: 'battle_attack', attack: { id: 'saved-set', enemyId: state.currentEnemy!.id, exercise: 'push-up', correctReps: 10 } });
   state = gameReducer(state, { type: 'set_screen', screen: 'main' });
   return state;
 }
@@ -45,7 +45,7 @@ it('returns to the main screen after a mid-battle reload without restoring attac
   const first = renderHook(useGameState);
   act(() => first.result.current.startBattle());
   act(() => first.result.current.enemyAttack());
-  act(() => first.result.current.handleExerciseEvent(rep('squat')));
+  act(() => first.result.current.handleBattleAttack({ id: 'squat-set', enemyId: 'enemy-1', exercise: 'squat', correctReps: 1 }));
   expect(first.result.current.player.hp).toBe(96);
   const saved = JSON.parse(window.localStorage.getItem(PROGRESS_STORAGE_KEY)!);
   expect(Object.keys(saved.progress).sort()).toEqual(['currentEnemyIndex', 'dailyQuest', 'exercises', 'player', 'recoveryCharges', 'recoveryTraining']);
@@ -100,8 +100,8 @@ it('loads older saves with an empty recovery inventory without losing existing p
 it('resumes at the next round after reloading during a victory menu without replaying rewards', () => {
   const first = renderHook(useGameState);
   act(() => first.result.current.startBattle());
-  act(() => first.result.current.handleExerciseEvent(rep('push-up')));
-  act(() => first.result.current.handleExerciseEvent(rep('push-up')));
+  act(() => first.result.current.handleBattleAttack({ id: 'pushup-set', enemyId: 'enemy-1', exercise: 'push-up', correctReps: 6 }));
+  act(() => first.result.current.handleBattleAttack({ id: 'pushup-set', enemyId: 'enemy-1', exercise: 'push-up', correctReps: 6 }));
   expect(first.result.current.roundPhase).toBe('enemy_defeated');
   const xp = first.result.current.player.xp;
   first.unmount();

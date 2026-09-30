@@ -44,7 +44,7 @@ export function MainScreen({ state, onStartWorkout, onStartBattle, journeyOnly =
       <aside className="journey-aside" aria-label="Player progression">
         <PlayerStats player={state.player} />
         <DailyQuest quest={state.dailyQuest} />
-        <section className="training-callout"><Icon name="Activity" /><p className="eyebrow">BUILD YOUR FOUNDATION</p><h3>Train before the fight.</h3><p>Correct reps earn XP and strengthen your next attack.</p><button className="text-button" onClick={onStartWorkout}>Go to training<Icon name="ArrowRight" /></button></section>
+        <section className="training-callout"><Icon name="Activity" /><p className="eyebrow">BUILD YOUR FOUNDATION</p><h3>Train before the fight.</h3><p>Correct reps earn XP and build exercise mastery.</p><button className="text-button" onClick={onStartWorkout}>Go to training<Icon name="ArrowRight" /></button></section>
       </aside>
     </div>
   </div>;

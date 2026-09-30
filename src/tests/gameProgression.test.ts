@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { addPlayerXp, applyExerciseEvent, createGameState, gameReducer, generateEnemy } from '../game/progression';
+import { addPlayerXp, applyBattleAttack, applyExerciseEvent, createGameState, gameReducer, generateEnemy } from '../game/progression';
 import type { ExerciseType, GameState } from '../game/types';
 
 function reps(state: GameState, exercise: ExerciseType, count: number) {
   for (let i = 0; i < count; i++) {
-    state = applyExerciseEvent(state, { exercise, status: 'correct', timestamp: i });
+    state = state.screen === 'battle' ? applyBattleAttack(state, { id: crypto.randomUUID(), enemyId: state.currentEnemy!.id, exercise, correctReps: 1 }) : applyExerciseEvent(state, { exercise, status: 'correct', timestamp: i });
   }
   return state;
 }
@@ -49,11 +49,9 @@ describe('game progression', () => {
     state.screen = 'battle';
     state.currentEnemy = { id: 'test', name: 'Test Enemy', hp: 50, maxHp: 50, attack: 5, defense: 2, isBoss: false };
     
-    state = applyExerciseEvent(state, { exercise: 'squat', status: 'correct', timestamp: 1 });
+    state = applyBattleAttack(state, { id: 'set-1', enemyId: 'test', exercise: 'squat', correctReps: 1 });
     
-    // Squat base damage is 10. Power is 10. 
-    // Damage = Math.floor(10 * (1 + 10 * 0.1) * (1 + 1 * 0.1)) = Math.floor(10 * 2 * 1.1) = 22
-    expect(state.currentEnemy?.hp).toBe(28); // 50 - 22
+    expect(state.currentEnemy?.hp).toBe(45);
   });
 
   it('awards normal victory once and retains the defeated enemy until the guarded transition', () => {
@@ -61,7 +59,7 @@ describe('game progression', () => {
     state.screen = 'battle';
     state.currentEnemy = { id: 'test', name: 'Test Enemy', hp: 20, maxHp: 20, attack: 5, defense: 2, isBoss: false };
     
-    state = applyExerciseEvent(state, { exercise: 'squat', status: 'correct', timestamp: 1 });
+    state = applyBattleAttack(state, { id: 'set-1', enemyId: 'test', exercise: 'squat', correctReps: 4 });
     
     expect(state.screen).toBe('battle');
     expect(state.currentEnemy?.hp).toBe(0);
@@ -113,7 +111,7 @@ describe('game progression', () => {
     state = gameReducer(state, { type: 'recover', useNumber: 2 });
     expect(state.recoveryUses).toBe(2); expect(state.recoveryCharges).toBe(1);
     expect(gameReducer(state, { type: 'recover', useNumber: 3 })).toBe(state);
-    state = reps(state, 'push-up', 2);
+    state = reps(state, 'push-up', 6);
     state = gameReducer(state, { type: 'round_death_complete', enemyId: 'enemy-1' });
     state = gameReducer(state, { type: 'next_round', enemyId: 'enemy-1' });
     expect(state.currentEnemyIndex).toBe(2);

@@ -103,6 +103,25 @@
 .hands-free-status h2 { font-size: clamp(20px, 2vw, 30px); margin: 12px 0; line-height: 1.2; }
 .hands-free-status p { color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
 .hands-free-countdown { display: block; color: var(--accent); font-size: 64px; font-variant-numeric: tabular-nums; text-align: center; margin: 20px 0; }
+.attack-progress { margin: 20px 0; text-align: center; font-variant-numeric: tabular-nums; }
+.attack-totals { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.attack-totals strong { display: block; font-size: clamp(32px, 4vw, 52px); color: var(--accent); }
+.attack-totals span { color: var(--text-muted); font-size: 10px; letter-spacing: 1px; }
+.damage-total { animation: rep-damage-pulse 240ms ease-out; }
+.rep-damage-feedback { height: 22px; margin-top: 8px; color: var(--accent); font-size: 12px; }
+.rep-damage-feedback span { display: inline-block; animation: rep-damage-gain 700ms ease-out forwards; }
+.hands-free-status .attack-time { font-size: 10px; color: var(--text-muted); }
+[data-attack-phase="resolving_attack"]:not([data-attack-damage="0"]) .fighter-status:not(.fighter-enemy) { animation: player-set-attack 300ms ease-out; }
+@keyframes rep-damage-pulse { from { transform: scale(1.05); } to { transform: scale(1); } }
+@keyframes rep-damage-gain { 0% { opacity: 0; transform: translateY(3px); } 20%, 65% { opacity: 1; } 100% { opacity: 0; transform: translateY(-4px); } }
+@keyframes player-set-attack { 0%, 100% { transform: translateX(0); } 40% { transform: translateX(8px); border-color: var(--accent); } }
+.reduce-motion .damage-total, .reduce-motion .rep-damage-feedback span,
+.reduce-motion [data-attack-phase="resolving_attack"] .fighter-status { animation: none; }
+.reduce-motion .rep-damage-feedback { visibility: hidden; }
+@media (prefers-reduced-motion: reduce) {
+  .damage-total, .rep-damage-feedback span, [data-attack-phase="resolving_attack"] .fighter-status { animation: none; }
+  .rep-damage-feedback { visibility: hidden; }
+}
 .gesture-choices { display: grid; gap: 10px; margin-top: 20px; }
 .gesture-choice { display: grid; gap: 6px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
 .gesture-choice.detecting { border-color: var(--accent); background: var(--accent-soft); }

@@ -14,7 +14,7 @@ export function battleOverlay(battle: BattleSnapshot): BattleOverlayState | null
     case 'battle_fight': return { type: 'fight', text: 'FIGHT!' };
     case 'attack_confirmed': return { type: 'attack_selected', text: `${attack?.name} ATTACK`, detail: 'SELECTED' };
     case 'exercise_announcement': return battle.selectedAttack ? { type: 'exercise', text: EXERCISE_ANNOUNCEMENTS[battle.selectedAttack], detail: 'START AFTER THIS TITLE' } : null;
-    case 'resolving_attack': return { type: 'damage', text: `${attack?.name} ATTACK`, detail: 'HIT!' };
+    case 'resolving_attack': return { type: 'damage', text: `${battle.accumulatedDamage} DAMAGE`, detail: `${attack?.name} ATTACK · ${battle.reps} REPS` };
     case 'recovering': return { type: 'recovery', text: `RECOVERY IN ${battle.countdown}`, detail: `HOLD STILL · +${battle.recoveryPercent}% MAX HP · MOVE TO CANCEL` };
     case 'resolving_recovery': return { type: 'recovery', text: `+${battle.recoveryHealedHp} HP`, detail: `YOUR TURN · ${battle.recoveryPercent}% MAX HP` };
     case 'enemy_turn': return { type: 'enemy_turn', text: 'ENEMY TURN', detail: 'BRACE YOURSELF' };

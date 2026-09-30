@@ -1,3 +1,4 @@
+import { applyBattleAttack, createGameState, gameReducer } from '../game/progression';
 import { describe, expect, it } from 'vitest';
 import { HandsFreeBattleController, type BattleCommand } from '../game/handsFreeBattleController';
 import { RECOVERY, recoveryHealPercent, HANDS_FREE_CONFIG as C } from '../game/handsFreeConfig';
@@ -37,6 +38,11 @@ export class BattleSequence {
   jack() { this.hold(closedFrame, 300); this.hold(openFrame, 400); this.hold(closedFrame, 400); }
   squat(bottom = 85) { const s = new SquatSequence(); s.rep({}, bottom); s.frames.forEach(f => this.frame(f)); }
   pushup(bottom = 85) { const s = new PushUpSequence(); s.rep(bottom); s.frames.forEach(f => this.frame(f)); }
+  finish() {
+    while (this.state.phase === 'performing_attack') {
+      this.now += 50; this.commands.push(...this.controller.advance(this.now, this.health));
+    }
+  }
   get attacks() { return this.commands.filter(c => c.type === 'attack'); }
 }
 
@@ -81,6 +87,7 @@ describe('hands-free recovery turns', () => {
     if (attack === 'basic') s.squat();
     else if (attack === 'strong') s.pushup();
     else for (let n = 0; n < 5; n++) s.jack();
+    s.finish();
     expect(s.state.phase).toBe('resolving_attack');
     expect(s.attacks).toHaveLength(1);
     expect(s.commands.some(command => command.type === 'enemy_attack')).toBe(false);
@@ -285,21 +292,22 @@ describe('hands-free orchestration using the real exercise detectors', () => {
     s.squat(); expect(s.state.selectedAttack).toBe('basic');
     expect(s.attacks).toHaveLength(0); expect(s.state.reps).toBe(0);
     expect(s.state.squatPhase).toBe('standing'); expect(s.state.selectionLocked).toBe(true);
-    s.prepare(squatFrame(0)); s.squat();
+    s.prepare(squatFrame(0)); s.squat(); s.finish();
     expect(s.attacks).toHaveLength(1); expect(s.state.reps).toBe(1);
     s.hold(squatFrame(0), C.resolveMs + C.enemyTurnMs + C.betweenTurnsMs + 200);
     expect(s.commands.filter(c => c.type === 'enemy_attack')).toHaveLength(1);
     expect(s.state.phase).toBe('selecting_attack'); expect(s.state.selectedAttack).toBeNull();
   });
 
-  it('requires closed → open → closed for selection and five NEW jacks for a single hit', () => {
+  it('requires closed → open → closed for selection and accumulates new jacks until the deadline', () => {
     const s = new BattleSequence(); s.start(); s.hold(closedFrame, 300); s.hold(openFrame, 600);
     expect(s.state.candidate).toBe('fast'); expect(s.state.selectedAttack).toBeNull();
     expect(s.state.formFeedback.status).toBe('correct');
     s.hold(closedFrame, 400); expect(s.state.selectedAttack).toBe('fast');
     s.prepare(closedFrame);
-    for (let rep = 1; rep <= 5; rep++) { s.jack(); expect(s.state.reps).toBe(rep); expect(s.attacks).toHaveLength(rep === 5 ? 1 : 0); }
-    expect(s.attacks[0]).toMatchObject({ event: { exercise: 'jumping-jack' } });
+    for (let rep = 1; rep <= 5; rep++) { s.jack(); expect(s.state.reps).toBe(rep); expect(s.attacks).toHaveLength(0); }
+    s.finish();
+    expect(s.attacks[0]).toMatchObject({ attack: { exercise: 'jumping-jack', correctReps: 5 } });
   });
 
   it('requires a continuous stable plank, then a new full push-up after GO', () => {
@@ -309,7 +317,7 @@ describe('hands-free orchestration using the real exercise detectors', () => {
     s.hold(pushUpFrame(0), 700); expect(s.state.selectedAttack).toBeNull();
     s.frame(pushUpFrame(0)); expect(s.state.selectedAttack).toBe('strong');
     s.prepare(pushUpFrame(0)); s.pushup(130); expect(s.attacks).toHaveLength(0);
-    s.pushup(); expect(s.attacks).toHaveLength(1); expect(s.state.reps).toBe(1);
+    s.pushup(); s.finish(); expect(s.attacks).toHaveLength(1); expect(s.state.reps).toBe(1);
   });
 
   it('keeps visual plank readiness through elbow jitter without counting invalid hold time', () => {
@@ -374,7 +382,7 @@ describe('hands-free orchestration using the real exercise detectors', () => {
   });
 
   it.each(['victory', 'defeat'] as const)('stops all commands on %s', terminal => {
-    const s = new BattleSequence(); s.start(); s.hold(pushUpFrame(0), 800); s.prepare(pushUpFrame(0)); s.pushup();
+    const s = new BattleSequence(); s.start(); s.hold(pushUpFrame(0), 800); s.prepare(pushUpFrame(0)); s.pushup(); s.finish();
     if (terminal === 'victory') s.health.enemyHp = 0;
     else { s.hold(pushUpFrame(0), C.resolveMs); s.health.playerHp = 0; }
     s.frame(pushUpFrame(0)); expect(s.state.phase).toBe(terminal);
@@ -410,4 +418,75 @@ it('rejects upright, bent, poorly tracked, and moving plank selection poses', ()
     s.frame({ ...f, landmarks: f.landmarks!.map(p => ({ ...p, x: p.x + (i % 2 ? 0.06 : 0) })) });
   }
   expect(s.state.selectedAttack).toBeNull();
+});
+
+
+describe('unlimited reps within a timed set', () => {
+  const ready = (attack: 'basic' | 'fast' | 'strong') => {
+    const s = new BattleSequence(); s.start(squatFrame(0)); s.hold(squatFrame(0), 1600);
+    if (attack === 'basic') s.squat(); else if (attack === 'fast') s.jack(); else s.hold(pushUpFrame(0), 800);
+    s.prepare(attack === 'basic' ? squatFrame(0) : attack === 'fast' ? closedFrame : pushUpFrame(0));
+    return s;
+  };
+  it.each([
+    ['basic', 0, 0], ['basic', 1, 5], ['basic', 10, 50],
+    ['fast', 0, 0], ['fast', 1, 2], ['fast', 10, 20],
+    ['strong', 0, 0], ['strong', 1, 10], ['strong', 10, 100],
+  ] as const)('%s: real detectors count %i reps and resolve %i damage once', (attack, reps, damage) => {
+    const s = ready(attack);
+    expect(s.state.attackSecondsLeft).toBe(30);
+    for (let n = 0; n < reps; n++) {
+      if (attack === 'basic') s.squat(); else if (attack === 'fast') s.jack(); else s.pushup();
+      expect(s.state.reps).toBe(n + 1);
+      expect(s.state.accumulatedDamage).toBe(damage / reps * (n + 1));
+      expect(s.attacks).toHaveLength(0);
+    }
+    s.finish();
+    expect(s.attacks).toHaveLength(1);
+    expect(s.attacks[0].attack.correctReps).toBe(reps);
+    const initial = gameReducer(createGameState(), { type: 'start_battle' });
+    const next = applyBattleAttack(initial, s.attacks[0].attack);
+    expect(next.currentEnemy?.hp).toBe(Math.max(0, 60 - damage));
+    s.health.enemyHp = next.currentEnemy!.hp;
+    s.now += C.resolveMs;
+    s.commands.push(...s.controller.advance(s.now, s.health));
+    expect(s.commands.filter(c => c.type === 'enemy_attack')).toHaveLength(damage >= 60 ? 0 : 1);
+    s.controller.advance(s.now, s.health);
+    expect(s.attacks).toHaveLength(1);
+  });
+
+  it.each(['basic', 'fast', 'strong'] as const)('never counts the same %s frame twice or bridges a camera gap', attack => {
+    const s = ready(attack);
+    if (attack === 'basic') s.squat(); else if (attack === 'fast') s.jack(); else s.pushup();
+    const damage = s.state.accumulatedDamage;
+    const neutral = attack === 'basic' ? squatFrame(0) : attack === 'fast' ? closedFrame : pushUpFrame(0);
+    const duplicate = { ...neutral, timestampMs: s.now };
+    for (let n = 0; n < 10; n++) {
+      s.now += 50; s.controller.advance(s.now, s.health, duplicate);
+    }
+    expect(s.state.reps).toBe(1); expect(s.state.accumulatedDamage).toBe(damage);
+    expect(s.state.tracking).toBe(false);
+    s.hold(neutral, 1800);
+    if (attack === 'basic') s.squat(); else if (attack === 'fast') s.jack(); else s.pushup();
+    expect(s.state.reps).toBe(2); expect(s.state.accumulatedDamage).toBe(damage * 2);
+    s.finish();
+    expect(s.attacks).toHaveLength(1);
+  });
+
+  it('discards a partial movement at the deadline and resets totals for the next turn', () => {
+    const s = ready('fast');
+    s.jack();
+    const deadline = s.now + (C.attackDurationMs - 1100);
+    s.now = deadline - 300;
+    s.controller.advance(s.now, s.health);
+    s.hold(closedFrame, 100); s.hold(openFrame, 150);
+    s.frame(closedFrame); // Closing at the deadline is too late to earn a rep.
+    expect(s.state.phase).toBe('resolving_attack');
+    expect(s.state.accumulatedDamage).toBe(2);
+    s.hold(closedFrame, C.resolveMs + C.enemyTurnMs + C.betweenTurnsMs);
+    expect(s.state.phase).toBe('selecting_attack');
+    expect(s.state.reps).toBe(0); expect(s.state.accumulatedDamage).toBe(0);
+    s.commands = []; s.jack(); s.prepare(closedFrame);
+    s.jack(); expect(s.state.accumulatedDamage).toBe(2);
+  });
 });

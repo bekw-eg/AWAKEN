@@ -30,6 +30,7 @@ export const HANDS_FREE_CONFIG = {
   fightAnnouncementMs: 800,
   exerciseAnnouncementMs: 900,
   resolveMs: 1500,
+  attackDurationMs: 30000,
   enemyTurnMs: 1500,
   betweenTurnsMs: 1200,
   maxFrameGapMs: 400,
@@ -46,7 +47,7 @@ export const HANDS_FREE_CONFIG = {
 
 export type AttackType = 'basic' | 'fast' | 'strong';
 export const HANDS_FREE_ATTACKS = {
-  basic: { exercise: 'squat', name: 'BASIC', movement: 'SQUAT', selection: '1 full squat', reps: 1, neutral: 'Stand fully upright' },
-  fast: { exercise: 'jumping-jack', name: 'FAST', movement: 'JUMPING JACKS', selection: '1 full jumping jack', reps: 5, neutral: 'Feet together · arms down' },
-  strong: { exercise: 'push-up', name: 'STRONG', movement: 'PUSH-UP', selection: 'Hold a straight push-up stance', reps: 1, neutral: 'Hold your top plank · arms straight' },
-} as const satisfies Record<AttackType, { exercise: ExerciseType; name: string; movement: string; selection: string; reps: number; neutral: string }>;
+  basic: { exercise: 'squat', name: 'BASIC', movement: 'SQUAT', selection: '1 full squat', neutral: 'Stand fully upright' },
+  fast: { exercise: 'jumping-jack', name: 'FAST', movement: 'JUMPING JACKS', selection: '1 full jumping jack', neutral: 'Feet together · arms down' },
+  strong: { exercise: 'push-up', name: 'STRONG', movement: 'PUSH-UP', selection: 'Hold a straight push-up stance', neutral: 'Hold your top plank · arms straight' },
+} as const satisfies Record<AttackType, { exercise: ExerciseType; name: string; movement: string; selection: string; neutral: string }>;

@@ -44,6 +44,7 @@ export type Enemy = {
 };
 
 export type GameState = {
+  lastBattleAttackId: string | null;
   roundPhase: 'active' | 'enemy_defeated' | 'round_transition';
   recoveryUses: number;
   recoveryCharges: number;
