@@ -28,15 +28,19 @@ it('emits once through StrictMode replay, changing callbacks and a sustained tru
 });
 
 it('does not replay the last camera rep when game state is reset', () => {
-  const hook = renderHook(() => {
+  const hook = renderHook(({ count, counted }) => {
     const game = useGameState();
-    useSquatGameEvents(1, true, game.handleExerciseEvent);
+    useSquatGameEvents(count, counted, game.handleExerciseEvent);
     return game;
-  }, { wrapper });
-  expect(hook.result.current.player.xp).toBe(10);
+  }, { wrapper, initialProps: { count: 0, counted: false } });
+  
+  act(() => hook.result.current.setScreen('workout'));
+  hook.rerender({ count: 1, counted: true });
+
+  expect(hook.result.current.player.xp).toBe(15);
   act(() => hook.result.current.resetGame());
   expect(hook.result.current.player.xp).toBe(0);
-  hook.rerender();
+  hook.rerender({ count: 1, counted: true });
   expect(hook.result.current.player.xp).toBe(0);
 });
 
@@ -47,11 +51,14 @@ it('connects real squat detector outputs to XP and quest progress', () => {
     useSquatGameEvents(squat.repCount, squat.repJustCounted, game.handleExerciseEvent);
     return game;
   }, { wrapper, initialProps: { frame: null as SquatFrame | null } });
+  
+  act(() => hook.result.current.setScreen('workout'));
+  
   const sequence = new SquatSequence();
   sequence.calibrate();
   sequence.rep();
   sequence.rep();
   for (const frame of sequence.frames) hook.rerender({ frame });
-  expect(hook.result.current.player.xp).toBe(20);
+  expect(hook.result.current.player.xp).toBe(30);
   expect(hook.result.current.dailyQuest.objectives[0].current).toBe(2);
 });

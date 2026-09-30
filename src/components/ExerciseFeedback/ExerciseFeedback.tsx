@@ -1,4 +1,8 @@
+import { useStableText } from '../../motion/Motion';
 import type { SquatDetectionResult } from '../../exercise-engine/types';
+import { Icon } from '../UI/Icon';
+import { RepCounter } from '../UI/RepCounter';
+import { PhaseText, FeedbackText } from '../UI/MotionText';
 import './ExerciseFeedback.css';
 
 type Props = { result: SquatDetectionResult; onReset: () => void };
@@ -7,26 +11,28 @@ const format = (value: number | null, suffix = '', decimals = 0) =>
 
 export function ExerciseFeedback({ result, onReset }: Props) {
   const { phase, repCount, formStatus, feedback, metrics, trackingStatus, calibrationProgress } = result;
-  const status = formStatus === 'good' ? 'GOOD FORM' : formStatus === 'error' ? 'FORM ERROR' : 'WAITING';
+  const stableForm = useStableText(formStatus);
+  const status = stableForm === 'good' ? 'GOOD FORM' : stableForm === 'error' ? 'FORM ERROR' : 'WAITING';
 
   return (
-    <section className={`exercise-feedback form-${formStatus}`} aria-labelledby="exercise-title">
+    <section className={`exercise-feedback form-${stableForm}`} aria-labelledby="exercise-title">
       <header className="exercise-header">
         <div><p className="eyebrow">TRAINING / 01</p><h2 id="exercise-title">SQUAT TRAINING</h2></div>
-        <button type="button" onClick={onReset}>СБРОСИТЬ СЧЁТЧИК</button>
+        <button type="button" onClick={onReset} aria-label="СБРОСИТЬ СЧЁТЧИК"><Icon name="RotateCcw" />RESET</button>
       </header>
       <div className="exercise-summary">
-        <div className="rep-counter"><span key={repCount} className={repCount > 0 ? 'rep-value rep-flash' : 'rep-value'}>{repCount}</span><span>VALID REPS</span></div>
+        <RepCounter value={repCount} />
         <div className="exercise-state">
-          <p className="exercise-phase">PHASE <strong>{phase.toUpperCase()}</strong></p>
+          <p className="exercise-phase">PHASE <PhaseText phase={phase} /></p>
           <p className="form-badge">{status}</p>
-          <p className="exercise-message" role="status" aria-live="polite" lang="ru">{feedback ?? (phase === 'standing' ? 'Готово. Сделай приседание и полностью выпрямись.' : 'Продолжай движение')}</p>
+          <p className="exercise-message" role="status" aria-live="polite" lang="ru"><FeedbackText text={feedback ?? (phase === 'standing' ? 'Готово. Сделай приседание и полностью выпрямись.' : 'Продолжай движение')} /></p>
           {trackingStatus === 'calibrating' && <progress aria-label="Калибровка стоя" max={1} value={calibrationProgress} />}
         </div>
       </div>
       <details className="exercise-debug">
         <summary>DEBUG METRICS</summary>
         <dl>
+          <div><dt>Tracking status</dt><dd>{trackingStatus}</dd></div>
           <div><dt>Left knee</dt><dd>{format(metrics.leftKneeAngle, '°')}</dd></div>
           <div><dt>Right knee</dt><dd>{format(metrics.rightKneeAngle, '°')}</dd></div>
           <div><dt>Avg knee</dt><dd>{format(metrics.avgKneeAngle, '°')}</dd></div>

@@ -1,18 +1,46 @@
-import type { ExerciseEvent, ExerciseType, GameState, PlayerState } from './types';
+import type { ExerciseEvent, ExerciseType, GameState, PlayerState, Enemy, ExerciseProgress } from './types';
 
-export const REP_XP = 10;
-export const LEVEL_XP = 100;
+export const REP_XP = 15;
+export const LEVEL_XP_BASE = 100;
+export const EXERCISE_LEVEL_XP_BASE = 50;
 export const QUEST_XP = 150;
 export const QUEST_GOLD = 100;
+
 export const EXERCISES = [
-  { exercise: 'squat', label: 'Squats', stat: 'strength', shortStat: 'STR' },
-  { exercise: 'jumping-jack', label: 'Jumping Jacks', stat: 'endurance', shortStat: 'END' },
-  { exercise: 'knee-raise', label: 'Knee Raises', stat: 'agility', shortStat: 'AGI' },
-] as const satisfies readonly { exercise: ExerciseType; label: string; stat: keyof PlayerState; shortStat: string }[];
+  { exercise: 'squat', label: 'Squats', stat: 'power', shortStat: 'POW', type: 'Basic Attack' },
+  { exercise: 'jumping-jack', label: 'Jumping Jacks', stat: 'agility', shortStat: 'AGI', type: 'Fast Attack' },
+  { exercise: 'push-up', label: 'Push Ups', stat: 'strength', shortStat: 'STR', type: 'Strong Attack' },
+] as const satisfies readonly { exercise: ExerciseType; label: string; stat: keyof PlayerState; shortStat: string; type: string }[];
+
+export function generateEnemy(index: number): Enemy {
+  const isBoss = index === 10;
+  const multiplier = 1 + (index * 0.2);
+  return {
+    id: `enemy-${index}`,
+    name: isBoss ? `BOSS ${Math.floor(index/10)}` : `Enemy ${index}`,
+    hp: Math.floor((isBoss ? 200 : 50) * multiplier),
+    maxHp: Math.floor((isBoss ? 200 : 50) * multiplier),
+    attack: Math.floor((isBoss ? 15 : 5) * multiplier),
+    defense: Math.floor((isBoss ? 10 : 2) * multiplier),
+    isBoss
+  };
+}
 
 export function createGameState(): GameState {
   return {
-    player: { level: 1, xp: 0, xpToNextLevel: LEVEL_XP, strength: 1, endurance: 1, agility: 1, gold: 0 },
+    screen: 'main',
+    player: { 
+      level: 1, xp: 0, xpToNextLevel: LEVEL_XP_BASE, 
+      strength: 10, endurance: 10, agility: 10, power: 10, vitality: 10, defense: 5, stamina: 10,
+      hp: 100, maxHp: 100, gold: 0 
+    },
+    exercises: {
+      'squat': { level: 1, xp: 0, xpToNextLevel: EXERCISE_LEVEL_XP_BASE },
+      'jumping-jack': { level: 1, xp: 0, xpToNextLevel: EXERCISE_LEVEL_XP_BASE },
+      'push-up': { level: 1, xp: 0, xpToNextLevel: EXERCISE_LEVEL_XP_BASE }
+    },
+    currentEnemyIndex: 1,
+    currentEnemy: null,
     dailyQuest: {
       objectives: EXERCISES.map(({ exercise }) => ({ exercise, current: 0, target: 10, completed: false })),
       rewardClaimed: false,
@@ -20,32 +48,125 @@ export function createGameState(): GameState {
   };
 }
 
-export function addXp(player: PlayerState, amount: number): PlayerState {
-  const total = player.xp + amount;
-  return { ...player, level: player.level + Math.floor(total / LEVEL_XP), xp: total % LEVEL_XP };
+export function addPlayerXp(player: PlayerState, amount: number): PlayerState {
+  let { level, xp, xpToNextLevel, hp, maxHp, strength, agility, power, vitality, defense, stamina } = player;
+  xp += amount;
+  while (xp >= xpToNextLevel) {
+    xp -= xpToNextLevel;
+    level++;
+    xpToNextLevel = Math.floor(xpToNextLevel * 1.2);
+    // Auto distribute stats for now
+    strength += 1; agility += 1; power += 1; vitality += 1; defense += 1; stamina += 1;
+    maxHp += 10;
+    hp = maxHp; // Heal on level up
+  }
+  return { ...player, level, xp, xpToNextLevel, hp, maxHp, strength, agility, power, vitality, defense, stamina };
 }
 
-/** Pure game transition; no camera, clock, storage or React dependencies. */
+export function addExerciseXp(progress: ExerciseProgress, amount: number): ExerciseProgress {
+  let { level, xp, xpToNextLevel } = progress;
+  xp += amount;
+  while (xp >= xpToNextLevel) {
+    xp -= xpToNextLevel;
+    level++;
+    xpToNextLevel = Math.floor(xpToNextLevel * 1.5);
+  }
+  return { level, xp, xpToNextLevel };
+}
+
 export function applyExerciseEvent(state: GameState, event: ExerciseEvent): GameState {
   if (event.status !== 'correct') return state;
   const definition = EXERCISES.find(({ exercise }) => exercise === event.exercise);
   if (!definition) return state;
 
-  let player = addXp(state.player, REP_XP);
-  const objectives = state.dailyQuest.objectives.map((objective) => {
-    if (objective.exercise !== event.exercise || objective.completed) return objective;
-    const current = Math.min(objective.current + 1, objective.target);
-    const completed = current === objective.target;
-    if (completed) player = { ...player, [definition.stat]: player[definition.stat] + 1 };
-    return { ...objective, current, completed };
-  });
-  const earnsReward = !state.dailyQuest.rewardClaimed && objectives.every(({ completed }) => completed);
-  if (earnsReward) player = { ...addXp(player, QUEST_XP), gold: player.gold + QUEST_GOLD };
-  return { player, dailyQuest: { objectives, rewardClaimed: state.dailyQuest.rewardClaimed || earnsReward } };
+  let newState = { ...state };
+
+  // Add exercise XP
+  newState.exercises = {
+    ...newState.exercises,
+    [event.exercise]: addExerciseXp(newState.exercises[event.exercise], REP_XP)
+  };
+
+  // If in battle, deal damage
+  if (newState.screen === 'battle' && newState.currentEnemy) {
+    const exerciseLevel = newState.exercises[event.exercise].level;
+    const statValue = newState.player[definition.stat] as number;
+    // Damage Formula
+    const baseDamage = event.exercise === 'push-up' ? 20 : event.exercise === 'squat' ? 10 : 5;
+    const damage = Math.floor(baseDamage * (1 + statValue * 0.1) * (1 + exerciseLevel * 0.1));
+    
+    // Apply damage to enemy
+    const enemyHp = Math.max(0, newState.currentEnemy.hp - damage);
+    newState.currentEnemy = { ...newState.currentEnemy, hp: enemyHp };
+
+    // If enemy dies
+    if (enemyHp <= 0) {
+      newState.player = addPlayerXp(newState.player, newState.currentEnemy.isBoss ? 200 : 50);
+      if (newState.currentEnemy.isBoss) {
+        newState.currentEnemyIndex = 1; // reset to 1 for next stage, or we could just go to 11
+      } else {
+        newState.currentEnemyIndex++;
+      }
+      newState.currentEnemy = null;
+      newState.screen = 'main';
+      return newState;
+    }
+  } else if (newState.screen === 'workout') {
+    newState.player = addPlayerXp(newState.player, REP_XP);
+    
+    // Handle daily quest
+    const objectives = newState.dailyQuest.objectives.map((objective) => {
+      if (objective.exercise !== event.exercise || objective.completed) return objective;
+      const current = Math.min(objective.current + 1, objective.target);
+      const completed = current === objective.target;
+      if (completed) {
+        newState.player = { ...newState.player, [definition.stat]: (newState.player[definition.stat] as number) + 1 };
+      }
+      return { ...objective, current, completed };
+    });
+    
+    const earnsReward = !newState.dailyQuest.rewardClaimed && objectives.every(({ completed }) => completed);
+    if (earnsReward) {
+      newState.player = { ...addPlayerXp(newState.player, QUEST_XP), gold: newState.player.gold + QUEST_GOLD };
+    }
+    
+    newState.dailyQuest = { objectives, rewardClaimed: newState.dailyQuest.rewardClaimed || earnsReward };
+  }
+
+  return newState;
 }
 
-export type GameAction = { type: 'exercise'; event: ExerciseEvent } | { type: 'reset' };
+export type GameAction = 
+  | { type: 'exercise'; event: ExerciseEvent } 
+  | { type: 'reset' }
+  | { type: 'set_screen'; screen: GameState['screen'] }
+  | { type: 'start_battle' }
+  | { type: 'enemy_attack' };
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
-  return action.type === 'reset' ? createGameState() : applyExerciseEvent(state, action.event);
+  switch (action.type) {
+    case 'reset':
+      return createGameState();
+    case 'exercise':
+      return applyExerciseEvent(state, action.event);
+    case 'set_screen':
+      return { ...state, screen: action.screen };
+    case 'start_battle':
+      return { ...state, screen: 'battle', currentEnemy: generateEnemy(state.currentEnemyIndex) };
+    case 'enemy_attack': {
+      if (state.screen !== 'battle' || !state.currentEnemy) return state;
+      const damage = Math.max(1, state.currentEnemy.attack - Math.floor(state.player.defense / 2));
+      const playerHp = Math.max(0, state.player.hp - damage);
+      let nextState = { ...state, player: { ...state.player, hp: playerHp } };
+      if (playerHp <= 0) {
+        // Player died
+        nextState.screen = 'main';
+        nextState.currentEnemy = null;
+        nextState.player.hp = nextState.player.maxHp; // restore HP for now
+      }
+      return nextState;
+    }
+    default:
+      return state;
+  }
 }

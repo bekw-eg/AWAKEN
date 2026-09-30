@@ -87,6 +87,7 @@ export type JumpingJackFrame = {
 
 export type JumpingJackMetrics = {
   ankleWidthRatio: number | null;
+  // Legacy names: normalized image-space wrist Y minus shoulder Y, not body-size ratios.
   leftWristHeightRatio: number | null;
   rightWristHeightRatio: number | null;
 };
@@ -110,7 +111,7 @@ export type JumpingJackConfig = {
   closedAnkleRatioMax: number;
   openAnkleRatioMin: number;
 
-  openWristHeightRatioMax: number; // Smaller Y is higher. 0 = top of screen.
+  openWristHeightRatioMax: number; // Wrist Y minus shoulder Y; negative means above the shoulder.
   
   transitionHoldMs: number;
   openHoldMs: number;

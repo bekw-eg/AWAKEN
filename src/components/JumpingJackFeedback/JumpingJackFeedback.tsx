@@ -1,63 +1,28 @@
-import React from 'react';
+import { useStableText } from '../../motion/Motion';
 import type { JumpingJackDetectionResult } from '../../exercise-engine/types';
-import './JumpingJackFeedback.css';
+import { Icon } from '../UI/Icon';
+import { RepCounter } from '../UI/RepCounter';
+import { PhaseText, FeedbackText } from '../UI/MotionText';
+import '../ExerciseFeedback/ExerciseFeedback.css';
 
-export type JumpingJackFeedbackProps = {
-  result: JumpingJackDetectionResult;
-  onReset: () => void;
-};
-
-export const JumpingJackFeedback: React.FC<JumpingJackFeedbackProps> = ({ result, onReset }) => {
-  const { phase, repCount, formStatus, feedback, trackingStatus, metrics } = result;
-
-  return (
-    <div className="jumping-jack-feedback">
-      <div className="feedback-header">
-        <div>
-          <h2>JUMPING JACK</h2>
-          <button type="button" onClick={onReset} style={{ fontSize: '0.7rem', padding: '2px 6px', marginTop: '4px', cursor: 'pointer' }}>RESET</button>
-        </div>
-        <div className="reps">REPS {repCount}</div>
+export type JumpingJackFeedbackProps = { result: JumpingJackDetectionResult; onReset: () => void };
+export function JumpingJackFeedback({ result, onReset }: JumpingJackFeedbackProps) {
+  const stableForm = useStableText(result.formStatus);
+  return <section className={`exercise-feedback form-${stableForm}`} aria-labelledby="jumping-jack-title">
+    <header className="exercise-header"><div><p className="eyebrow">FAST ATTACK · TRAINING</p><h2 id="jumping-jack-title">JUMPING JACK</h2></div><button type="button" onClick={onReset} aria-label="Reset jumping jack counter"><Icon name="RotateCcw" />RESET</button></header>
+    <div className="exercise-summary">
+      <RepCounter value={result.repCount} series />
+      <div className="exercise-state"><p className="exercise-phase">PHASE <PhaseText phase={result.phase} /></p>
+        <p className="form-badge">{stableForm === 'good' ? 'GOOD FORM' : stableForm === 'error' ? 'FORM ERROR' : 'WAITING'}</p>
+        <p className="exercise-message" role="status"><FeedbackText text={result.feedback || (result.trackingStatus === 'ready' ? 'Open fully, then return to your starting position.' : 'SEARCHING FOR USER')} /></p>
       </div>
-
-      {trackingStatus !== 'ready' ? (
-        <div className="status-warning">{feedback || 'SEARCHING FOR USER...'}</div>
-      ) : (
-        <>
-          <div className="phase-indicator">
-            <span className="label">PHASE</span>
-            <span className="value">{phase.toUpperCase()}</span>
-          </div>
-
-          {formStatus === 'error' && (
-            <div className="form-feedback error">
-              <strong>FORM ERROR</strong>
-              <p>{feedback}</p>
-            </div>
-          )}
-
-          {formStatus === 'good' && (
-            <div className="form-feedback good">
-              <strong>GOOD FORM</strong>
-            </div>
-          )}
-        </>
-      )}
-
-      <details className="metrics-details">
-        <summary>Debug Metrics</summary>
-        <pre>
-          {JSON.stringify(
-            {
-              ankleWidthRatio: metrics.ankleWidthRatio?.toFixed(2),
-              leftWristHeightRatio: metrics.leftWristHeightRatio?.toFixed(2),
-              rightWristHeightRatio: metrics.rightWristHeightRatio?.toFixed(2),
-            },
-            null,
-            2
-          )}
-        </pre>
-      </details>
     </div>
-  );
-};
+    <details className="exercise-debug"><summary>DEBUG METRICS</summary><dl>
+      <div><dt>Tracking</dt><dd>{result.trackingStatus}</dd></div>
+      <div><dt>Ankle width</dt><dd>{result.metrics.ankleWidthRatio?.toFixed(2) ?? '—'}</dd></div>
+      <div><dt>Left wrist</dt><dd>{result.metrics.leftWristHeightRatio?.toFixed(2) ?? '—'}</dd></div>
+      <div><dt>Right wrist</dt><dd>{result.metrics.rightWristHeightRatio?.toFixed(2) ?? '—'}</dd></div>
+    </dl></details>
+    <p className="exercise-tip">Start with feet together and arms down. Keep hands and feet inside the frame.</p>
+  </section>;
+}

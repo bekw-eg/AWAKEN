@@ -43,8 +43,8 @@ export const closedFrame = createJJFrame(
   { x: 0.6, y: 0.9, z: 0, visibility: 1 }  // right ankle
 );
 
-// Open ankles: distance = 1.0 (from x:0.0 to x:1.0) -> ratio = 1.0 / 0.4 = 2.5 (> 2.2)
-// Arms up: wrist Y < shoulder Y (0.1 < 0.3) -> diff = -0.2 (< -0.15)
+// Open ankles: distance = 1.0 -> ratio = 2.5 (> 1.9).
+// Arms up: wrist Y minus shoulder Y = -0.2 (< -0.05).
 export const openFrame = createJJFrame(
   { x: 0.3, y: 0.3, z: 0, visibility: 1 }, // left shoulder
   { x: 0.7, y: 0.3, z: 0, visibility: 1 }, // right shoulder
@@ -54,22 +54,22 @@ export const openFrame = createJJFrame(
   { x: 1.0, y: 0.9, z: 0, visibility: 1 }  // right ankle
 );
 
-// Narrow legs: distance = 0.8 -> ratio = 0.8 / 0.4 = 2.0 (< 2.2)
+// Narrow legs: distance = 0.68 -> ratio = 1.7 (< 1.9).
 export const narrowLegsFrame = createJJFrame(
   { x: 0.3, y: 0.3, z: 0, visibility: 1 }, // left shoulder
   { x: 0.7, y: 0.3, z: 0, visibility: 1 }, // right shoulder
   { x: 0.1, y: 0.1, z: 0, visibility: 1 }, // left wrist (up)
   { x: 0.9, y: 0.1, z: 0, visibility: 1 }, // right wrist (up)
-  { x: 0.1, y: 0.9, z: 0, visibility: 1 }, // left ankle
-  { x: 0.9, y: 0.9, z: 0, visibility: 1 }  // right ankle
+  { x: 0.16, y: 0.9, z: 0, visibility: 1 }, // left ankle
+  { x: 0.84, y: 0.9, z: 0, visibility: 1 }  // right ankle
 );
 
-// Low arms: wrist Y = 0.2 -> diff = -0.1 (> -0.15)
+// Low arms: wrists below shoulders, Y difference = +0.05.
 export const lowArmsFrame = createJJFrame(
   { x: 0.3, y: 0.3, z: 0, visibility: 1 }, // left shoulder
   { x: 0.7, y: 0.3, z: 0, visibility: 1 }, // right shoulder
-  { x: 0.1, y: 0.2, z: 0, visibility: 1 }, // left wrist
-  { x: 0.9, y: 0.2, z: 0, visibility: 1 }, // right wrist
+  { x: 0.1, y: 0.35, z: 0, visibility: 1 }, // left wrist
+  { x: 0.9, y: 0.35, z: 0, visibility: 1 }, // right wrist
   { x: 0.0, y: 0.9, z: 0, visibility: 1 }, // left ankle
   { x: 1.0, y: 0.9, z: 0, visibility: 1 }  // right ankle
 );

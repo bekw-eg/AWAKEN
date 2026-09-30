@@ -1,8 +1,20 @@
-.hunter-level { font-size: 18px; margin: 18px 0; color: #a7becb; }
-.hunter-level strong { font-size: 38px; color: #e0fcff; }
-.hunter-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 22px 0; }
-.hunter-stats div { padding: 12px; border: 1px solid #30424e; background: #0d1821; }
-.hunter-stats dt { font-size: 10px; color: #a7becb; }
-.hunter-stats dd { margin: 8px 0 0; font-size: 24px; }
-.hunter-gold { color: #f1d59c; font-size: 13px; }
-.hunter-gold strong { margin-left: 12px; }
+.hunter-status > .section-title { margin-bottom: 20px; }
+.hunter-status > .section-title > .icon { color: var(--text-muted); width: 16px; height: 16px; }
+.hunter-level { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+.hunter-level > div { display: flex; align-items: baseline; gap: 10px; }
+.hunter-level strong { font-size: 46px; font-weight: 500; letter-spacing: -2px; line-height: 1; font-variant-numeric: tabular-nums; }
+.hunter-level .label { font-size: 10px; }
+.stat-progress-label { display: flex; justify-content: space-between; gap: 10px; font-size: 10px; color: var(--text-muted); margin-bottom: 10px; font-variant-numeric: tabular-nums; }
+.stat-progress-label strong { color: var(--text-secondary); font-weight: 500; }
+.hunter-health { display: flex; align-items: center; gap: 8px; margin-top: 20px; color: var(--text-secondary); font-size: 11px; }
+.hunter-health .icon { width: 14px; height: 14px; color: var(--success); }
+.hunter-health strong { margin-left: auto; font-weight: 500; color: var(--text-primary); }
+.hunter-health small { font-size: 10px; color: var(--text-muted); }
+.hunter-stats { margin: 22px 0; padding-top: 18px; border-top: 1px solid var(--border); display: grid; grid-template-columns: 1fr 1fr; gap: 18px 20px; }
+.hunter-stats > div { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.hunter-stats dt { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--text-muted); }
+.hunter-stats .icon { width: 13px; height: 13px; }
+.hunter-stats dd { font-size: 13px; margin: 0; font-variant-numeric: tabular-nums; }
+.hunter-gold { display: flex; align-items: center; gap: 8px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 10px; color: var(--text-muted); }
+.hunter-gold .icon { width: 14px; height: 14px; color: var(--warning); }
+.hunter-gold strong { margin-left: auto; color: var(--text-primary); font-weight: 500; }
