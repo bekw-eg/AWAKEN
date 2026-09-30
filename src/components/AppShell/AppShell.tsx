@@ -7,7 +7,6 @@ import './AppShell.css';
 
 export type Page = 'home' | 'journey' | 'training' | 'profile' | 'settings';
 const navigation: { page: Page; label: string; icon: IconName }[] = [
-  { page: 'home', label: 'Home', icon: 'Home' },
   { page: 'journey', label: 'Journey', icon: 'Map' },
   { page: 'training', label: 'Training', icon: 'Activity' },
   { page: 'profile', label: 'Profile', icon: 'User' },
@@ -25,9 +24,9 @@ export function AppShell({ page, battle, player, onNavigate, children, reducedMo
       <nav aria-label="Main navigation">
         <p className="nav-label">PLAY</p>
         {navigation.map(({ page: target, label, icon }) => <button key={target}
-          className="nav-item" aria-current={page === target ? 'page' : undefined}
+          className="nav-item" aria-current={page === target || page === 'home' && target === 'journey' ? 'page' : undefined}
           onClick={() => onNavigate(target)}><Icon name={icon} /><span>{label}</span>
-          {page === target && <span className="nav-indicator" />}
+          {(page === target || page === 'home' && target === 'journey') && <span className="nav-indicator" />}
         </button>)}
       </nav>
       <div className="sidebar-bottom">

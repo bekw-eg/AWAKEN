@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addPlayerXp, applyExerciseEvent, createGameState, gameReducer } from '../game/progression';
+import { addPlayerXp, applyExerciseEvent, createGameState, gameReducer, generateEnemy } from '../game/progression';
 import type { ExerciseType, GameState } from '../game/types';
 
 function reps(state: GameState, exercise: ExerciseType, count: number) {
@@ -10,6 +10,14 @@ function reps(state: GameState, exercise: ExerciseType, count: number) {
 }
 
 describe('game progression', () => {
+  it('reduces boss attack by roughly thirty percent while retaining regular enemy damage', () => {
+    expect(generateEnemy(10).attack).toBe(31);
+    const boss = gameReducer({ ...createGameState(), currentEnemyIndex: 10 }, { type: 'start_battle' });
+    expect(gameReducer(boss, { type: 'enemy_attack' }).player.hp).toBe(71);
+    const normal = gameReducer(createGameState(), { type: 'start_battle' });
+    expect(generateEnemy(1).attack).toBe(6);
+    expect(gameReducer(normal, { type: 'enemy_attack' }).player.hp).toBe(96);
+  });
   it('awards 15 XP for each supported correct exercise in workout mode', () => {
     for (const exercise of ['squat', 'jumping-jack', 'push-up'] as const) {
       let initial = createGameState();

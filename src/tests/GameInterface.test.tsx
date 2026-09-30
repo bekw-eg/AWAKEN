@@ -83,7 +83,7 @@ it('shows round complete, waits five seconds, and starts exactly one next oppone
   expect(hp('Player')).toBe(96);
   hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup();
   expect(hp('Enemy 1')).toBe(0);
-  expect(screen.queryByRole('button', { name: 'CONTINUE →' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'SKIP' })).toBeNull();
   act(() => vi.advanceTimersByTime(600));
   expect(screen.getByRole('heading', { name: 'ROUND COMPLETE' })).toBeTruthy();
   expect(screen.getByText('+50 XP')).toBeTruthy();
@@ -93,6 +93,24 @@ it('shows round complete, waits five seconds, and starts exactly one next oppone
   expect(hp('Enemy 2')).toBe(70);
   expect(hp('Player')).toBe(96);
   act(() => vi.advanceTimersByTime(10000));
+  expect(hp('Enemy 2')).toBe(70);
+});
+
+it('SKIP exits the completed round to the main menu and saves the next encounter', () => {
+  const initial = progression.createGameState();
+  vi.spyOn(progression, 'createGameState').mockImplementation(() => ({ ...initial, player: { ...initial.player, strength: 300 } }));
+  start(); hold(closedFrame, 3200);
+  hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup();
+  act(() => vi.advanceTimersByTime(600));
+  fireEvent.click(screen.getByRole('button', { name: 'SKIP' }));
+  expect(screen.getByRole('heading', { name: 'Welcome back, Player.' })).toBeTruthy();
+  expect(screen.queryByRole('dialog', { name: 'Round complete' })).toBeNull();
+  act(() => vi.advanceTimersByTime(10000));
+  expect(screen.queryByLabelText('Test camera')).toBeNull();
+  expect(screen.getByRole('list', { name: 'Campaign encounters' }).querySelector('[aria-current="step"]')?.textContent).toContain('Enemy 2');
+  expect(screen.queryByRole('heading', { name: 'Victory.' })).toBeNull();
+  expect(vi.getTimerCount()).toBe(0);
+  fireEvent.click(screen.getByRole('button', { name: 'Enter battle' }));
   expect(hp('Enemy 2')).toBe(70);
 });
 
@@ -124,7 +142,7 @@ it('completes all encounters with hands-free attacks and waits for boss death be
       act(() => vi.advanceTimersByTime(600));
       expect(screen.getByRole('heading', { name: 'ROUND COMPLETE' })).toBeTruthy();
       expect(screen.getByText('+50 XP')).toBeTruthy();
-      fireEvent.click(screen.getByRole('button', { name: 'CONTINUE →' }));
+      act(() => vi.advanceTimersByTime(5000));
       expect(hp(encounter === 9 ? 'BOSS 1' : `Enemy ${encounter + 1}`)).toBeGreaterThan(0);
       continue;
     }
@@ -139,7 +157,7 @@ it('completes all encounters with hands-free attacks and waits for boss death be
   }
 }, 20000);
 
-it('announces recovery without a click and allows two boss heals on consecutive turns', () => {
+it('keeps the player turn after recovery and requires fresh movement to heal again before attacking the boss', () => {
   const initial = progression.createGameState();
   vi.spyOn(progression, 'createGameState').mockImplementation(() => ({ ...initial, currentEnemyIndex: 10, recoveryCharges: 3,
     player: { ...initial.player, hp: 24 } }));
@@ -154,18 +172,36 @@ it('announces recovery without a click and allows two boss heals on consecutive 
   expect(hp('Player')).toBe(74);
   expect(screen.getByTestId('battle-overlay').textContent).toContain('+50 HP');
   expect(screen.getByTestId('battle-overlay').textContent).toContain('50% MAX HP');
+  expect(screen.getByTestId('battle-overlay').textContent).toContain('YOUR TURN');
   act(() => vi.advanceTimersByTime(1500));
-  expect(hp('Player')).toBe(31); expect(hp('BOSS 1')).toBe(600);
+  expect(hp('Player')).toBe(74); expect(hp('BOSS 1')).toBe(600);
+  expect(document.querySelector('.boss-scene')?.getAttribute('data-state')).toBe('idle');
   act(() => vi.advanceTimersByTime(2700));
   expect(screen.getByText('2 / 3 CHARGES · 1 / 2 USES LEFT THIS FIGHT')).toBeTruthy();
+  hold(squatFrame(0), 6000);
+  expect(hp('Player')).toBe(74);
+  expect(phase()).toBe('selecting_attack');
+  expect(screen.getByText('MOVE, THEN STAND STILL TO RECOVER AGAIN')).toBeTruthy();
+  const movement = squatFrame(0);
+  movement.landmarks = movement.landmarks!.map((point, id) => [15, 16].includes(id) ? { ...point, y: .1 } : point);
+  frame(movement);
   hold(squatFrame(0), 5050);
-  expect(hp('Player')).toBe(81);
+  expect(hp('Player')).toBe(100);
+  expect(screen.getByTestId('battle-overlay').textContent).toContain('+26 HP');
   act(() => vi.advanceTimersByTime(4200));
-  expect(hp('Player')).toBe(38);
+  expect(hp('Player')).toBe(100);
   expect(screen.getByText('FIGHT LIMIT REACHED')).toBeTruthy();
   expect(screen.getByText('1 / 3 CHARGES · 0 / 2 USES LEFT THIS FIGHT')).toBeTruthy();
   hold(squatFrame(0), 6000);
-  expect(hp('Player')).toBe(38);
+  expect(hp('Player')).toBe(100);
+  hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup();
+  expect(hp('Player')).toBe(100); expect(hp('BOSS 1')).toBe(556);
+  act(() => vi.advanceTimersByTime(1500));
+  expect(hp('Player')).toBe(71);
+  expect(phase()).toBe('enemy_turn');
+  act(() => vi.advanceTimersByTime(2700));
+  hold(squatFrame(0), 6000);
+  expect(hp('Player')).toBe(71);
 });
 
 it('cancels the countdown on movement, heals only missing HP in round one and exhausts its charge', () => {
@@ -187,9 +223,13 @@ it('cancels the countdown on movement, heals only missing HP in round one and ex
   expect(hp('Player')).toBe(100);
   expect(screen.getByTestId('battle-overlay').textContent).toContain('+5 HP');
   act(() => vi.advanceTimersByTime(4200));
-  expect(hp('Player')).toBe(96); expect(hp('Enemy 1')).toBe(60);
+  expect(hp('Player')).toBe(100); expect(hp('Enemy 1')).toBe(60);
   expect(screen.getByText('NO CHARGES · EARN IN TRAINING')).toBeTruthy();
   hold(squatFrame(0), 6000);
+  expect(hp('Player')).toBe(100);
+  hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup();
+  expect(hp('Player')).toBe(100); expect(hp('Enemy 1')).toBe(16);
+  act(() => vi.advanceTimersByTime(1500));
   expect(hp('Player')).toBe(96);
 });
 
@@ -245,7 +285,8 @@ it('navigates every page while retaining game progress and applying camera prefe
   expect(camera.getAttribute('data-autostart')).toBe('false');
   expect(camera.getAttribute('data-mirrored')).toBe('false');
   expect(camera.closest('.reduce-motion')).toBeTruthy();
-  fireEvent.click(screen.getByRole('button', { name: 'Home' }));
+  expect(screen.queryByRole('button', { name: 'Home' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'AWAKEN home' }));
   expect(screen.getByRole('heading', { name: 'Welcome back, Player.' })).toBeTruthy();
   expect(screen.getByRole('progressbar', { name: 'Level progress' }).getAttribute('aria-valuenow')).toBe('15');
 });

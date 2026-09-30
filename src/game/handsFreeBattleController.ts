@@ -14,7 +14,7 @@ export type BattlePhase = 'camera_setup' | 'battle_intro' | 'battle_fight' | 'se
 export type BattleCommand = { type: 'attack'; event: ExerciseEvent } | { type: 'enemy_attack' } | { type: 'recover'; useNumber: number };
 export type BattleSnapshot = {
   recoveryAvailable: boolean; recoveryUsesLeft: number; recoveryCharges: number; recoveryPercent: number;
-  recoveryHoldMs: number; recoveryHealedHp: number; recoveryFullHp: boolean;
+  recoveryHoldMs: number; recoveryHealedHp: number; recoveryFullHp: boolean; recoveryNeedsMovement: boolean;
   phase: BattlePhase; selectedAttack: AttackType | null; candidate: AttackType | null;
   selectionLocked: boolean; reps: number; countdown: number; pushupHoldMs: number;
   squatPhase: string; jumpingJackPhase: string; feedback: string | null; formError: boolean;
@@ -32,13 +32,15 @@ export class HandsFreeBattleController {
   private recoveryUses = 0;
   private recoveryCharges = 0;
   private recoveryFullHp = true;
+  private recoveryArmed = true;
+  private recoveryRearmAnchor: PushUpFrame['landmarks'] = null;
   private recoveryHoldMs = 0;
   private recoveryLastAt: number | null = null;
   private recoveryAnchor: PushUpFrame['landmarks'] = null;
   private recoveryHealedHp = 0;
 
   private canRecover() {
-    return !this.recoveryFullHp && this.recoveryCharges > 0 && this.recoveryUses < RECOVERY.maxUsesPerFight;
+    return this.recoveryArmed && !this.recoveryFullHp && this.recoveryCharges > 0 && this.recoveryUses < RECOVERY.maxUsesPerFight;
   }
   private cancelRecovery() {
     // Keep calibrated selection detectors: moving out of the hold may be the
@@ -89,6 +91,7 @@ export class HandsFreeBattleController {
       recoveryAvailable: ['selecting_attack', 'recovering'].includes(this.phase) && this.canRecover(),
       recoveryUsesLeft: RECOVERY.maxUsesPerFight - this.recoveryUses, recoveryCharges: this.recoveryCharges,
       recoveryPercent: recoveryHealPercent(this.round), recoveryFullHp: this.recoveryFullHp,
+      recoveryNeedsMovement: !this.recoveryArmed,
       recoveryHoldMs: this.recoveryHoldMs, recoveryHealedHp: this.recoveryHealedHp,
       selectionLocked: this.phase !== 'selecting_attack', reps: this.reps,
       countdown: this.phase === 'recovering' ? Math.max(1, Math.ceil((RECOVERY.holdDurationMs - this.recoveryHoldMs) / 1000)) :
@@ -145,6 +148,14 @@ export class HandsFreeBattleController {
         break;
       case 'selecting_attack':
         if (fresh && this.tracking) {
+          // Only deliberate, reliably tracked movement on the player's turn
+          // enables another hold. Enemy damage and camera loss cannot rearm it.
+          if (!this.recoveryArmed && readyPoseTrackingReliable(frame, 'basic') && readyPoseTrackingReliable(frame, 'fast')) {
+            this.recoveryRearmAnchor ??= frame.landmarks;
+            const moved = [11, 12, 15, 16, 23, 24, 27, 28].some(id =>
+              Math.hypot(frame.landmarks![id].x - this.recoveryRearmAnchor![id].x, frame.landmarks![id].y - this.recoveryRearmAnchor![id].y) > RECOVERY.maxPoseDrift);
+            if (!this.recoveryPose(frame) || moved) this.recoveryArmed = true;
+          }
           this.selectFromFrame(frame, now);
           if (this.phase === 'selecting_attack' && !this.candidate && this.canRecover() && this.recoveryPose(frame)) {
             this.recoveryHoldMs = 0; this.recoveryLastAt = now; this.recoveryAnchor = frame.landmarks;
@@ -222,6 +233,8 @@ export class HandsFreeBattleController {
           if (this.recoveryHoldMs >= RECOVERY.holdDurationMs) {
             this.recoveryUses++;
             this.recoveryCharges--;
+            this.recoveryArmed = false;
+            this.recoveryRearmAnchor = null;
             const maxHp = health.playerMaxHp ?? 100;
             this.recoveryHealedHp = Math.min(maxHp - health.playerHp, Math.round(maxHp * recoveryHealPercent(this.round) / 100));
             this.resetDetectors();
@@ -231,6 +244,8 @@ export class HandsFreeBattleController {
         }
         break;
       case 'resolving_recovery':
+        if (elapsed >= C.resolveMs) this.enter('selecting_attack', now);
+        break;
       case 'resolving_attack':
         if (elapsed >= C.resolveMs) { this.enter('enemy_turn', now); return [{ type: 'enemy_attack' }]; }
         break;

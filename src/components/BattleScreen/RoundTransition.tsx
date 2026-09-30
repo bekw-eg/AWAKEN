@@ -5,15 +5,16 @@ import type { GameState } from '../../game/types';
 import { useReducedMotion } from '../../motion/Motion';
 import { Icon } from '../UI/Icon';
 
-export function RoundTransition({ enemyId, phase, onDeathComplete, onNextRound }: {
+export function RoundTransition({ enemyId, phase, onDeathComplete, onNextRound, onSkip }: {
   enemyId: string; phase: GameState['roundPhase'];
   onDeathComplete: (enemyId: string) => void; onNextRound: (enemyId: string) => void;
+  onSkip: () => void;
 }) {
   const completed = useRef(false);
   const timeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [seconds, setSeconds] = useState(5);
   const menu = useRef<HTMLDialogElement>(null);
-  const continueButton = useRef<HTMLButtonElement>(null);
+  const skipButton = useRef<HTMLButtonElement>(null);
   const reduced = useReducedMotion();
   const startNextRound = useCallback(() => {
     if (completed.current) return;
@@ -21,6 +22,12 @@ export function RoundTransition({ enemyId, phase, onDeathComplete, onNextRound }
     clearTimeout(timeout.current);
     onNextRound(enemyId);
   }, [enemyId, onNextRound]);
+  const skipRound = useCallback(() => {
+    if (completed.current) return;
+    completed.current = true;
+    clearTimeout(timeout.current);
+    onSkip();
+  }, [onSkip]);
 
   useEffect(() => {
     if (phase !== 'round_transition') return;
@@ -28,7 +35,7 @@ export function RoundTransition({ enemyId, phase, onDeathComplete, onNextRound }
     const previousFocus = document.activeElement;
     // A native modal sits above the arena and keeps keyboard focus inside.
     dialog?.showModal?.();
-    continueButton.current?.focus({ preventScroll: true });
+    skipButton.current?.focus({ preventScroll: true });
     return () => {
       dialog?.close?.();
       if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
@@ -50,13 +57,13 @@ export function RoundTransition({ enemyId, phase, onDeathComplete, onNextRound }
 
   if (phase !== 'round_transition') return null;
   return createPortal(<dialog ref={menu} className={`round-transition${reduced ? ' reduce-motion' : ''}`} aria-label="Round complete"
-    onCancel={event => { event.preventDefault(); startNextRound(); }}>
+    onCancel={event => { event.preventDefault(); skipRound(); }}>
     <div className="round-emblem" aria-hidden="true"><Icon name="Check" /></div>
     <div role="status"><p className="eyebrow">+50 XP</p><h2>ROUND COMPLETE</h2><p>Next opponent in {seconds} sec</p></div>
-    <button ref={continueButton} type="button" className="round-continue" onClick={startNextRound}>
+    <button ref={skipButton} type="button" className="round-continue" onClick={skipRound}>
       <span className="round-countdown-fill" aria-hidden="true" />
-      <span>CONTINUE →</span><span aria-hidden="true">{seconds} SEC</span>
+      <span>SKIP</span><span aria-hidden="true">{seconds} SEC</span>
     </button>
-    <p className="round-menu-hint">Ready? Skip the wait.</p>
+    <p className="round-menu-hint">SKIP returns to the main menu. Your progress is saved.</p>
   </dialog>, document.body);
 }

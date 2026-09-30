@@ -61,9 +61,32 @@ describe('hands-free recovery turns', () => {
     expect(s.state.recoveryHealedHp).toBe(recoveryHealPercent(round));
     expect(s.health.recoveryCharges).toBe(2);
     s.hold(squatFrame(0), C.resolveMs);
-    expect(s.commands).toEqual([{ type: 'recover', useNumber: 1 }, { type: 'enemy_attack' }]);
-    s.hold(squatFrame(0), C.enemyTurnMs);
-    expect(s.commands).toHaveLength(2);
+    expect(s.state.phase).toBe('selecting_attack');
+    s.hold(squatFrame(0), 10000);
+    expect(s.commands).toEqual([{ type: 'recover', useNumber: 1 }]);
+    expect(s.state.phase).toBe('selecting_attack');
+  });
+
+  it.each(['basic', 'fast', 'strong'] as const)('keeps the player turn after healing until the %s attack is completed', attack => {
+    const s = ready();
+    s.hold(squatFrame(0), RECOVERY.holdDurationMs + C.resolveMs);
+    expect(s.state.phase).toBe('selecting_attack');
+    s.hold(squatFrame(0), 1600);
+    s.commands = [];
+    if (attack === 'basic') s.squat();
+    else if (attack === 'fast') s.jack();
+    else s.hold(pushUpFrame(0), 800);
+    expect(s.state.selectedAttack).toBe(attack);
+    s.prepare(attack === 'basic' ? squatFrame(0) : attack === 'fast' ? closedFrame : pushUpFrame(0));
+    if (attack === 'basic') s.squat();
+    else if (attack === 'strong') s.pushup();
+    else for (let n = 0; n < 5; n++) s.jack();
+    expect(s.state.phase).toBe('resolving_attack');
+    expect(s.attacks).toHaveLength(1);
+    expect(s.commands.some(command => command.type === 'enemy_attack')).toBe(false);
+    s.hold(pushUpFrame(0), C.resolveMs);
+    expect(s.commands.filter(command => command.type === 'enemy_attack')).toHaveLength(1);
+    expect(s.state.phase).toBe('enemy_turn');
   });
 
   it.each(['empty', 'full', 'limit'] as const)('does not start or spend a charge when %s', reason => {
@@ -116,19 +139,44 @@ describe('hands-free recovery turns', () => {
     expect(s.commands).toEqual([]); expect(s.health.recoveryCharges).toBe(3);
   });
 
-  it('allows two consecutive recovery turns without cooldown, but never a third', () => {
+  it('requires fresh movement to repeat recovery without cooldown, but never permits a third', () => {
     const s = ready();
     for (const useNumber of [1, 2]) {
       s.hold(squatFrame(0), RECOVERY.holdDurationMs);
       expect(s.commands.at(-1)).toEqual({ type: 'recover', useNumber });
       s.hold(squatFrame(0), C.resolveMs + C.enemyTurnMs + C.betweenTurnsMs);
       s.frame(squatFrame(0));
+      if (useNumber === 1) {
+        s.hold(squatFrame(0), 6000);
+        expect(s.state.phase).toBe('selecting_attack');
+        expect(s.health.recoveryCharges).toBe(2);
+        s.frame({ landmarks: null, worldLandmarks: null });
+        s.hold(squatFrame(0), 6000);
+        expect(s.state.phase).toBe('selecting_attack');
+        const movement = squatFrame(0);
+        movement.landmarks = movement.landmarks!.map((point, id) => [15, 16].includes(id) ? { ...point, y: .1 } : point);
+        s.frame(movement); s.frame(squatFrame(0));
+        expect(s.state.phase).toBe('recovering');
+      }
     }
     expect(s.state.phase).toBe('selecting_attack');
     expect(s.health.recoveryCharges).toBe(1);
     expect(s.state.recoveryUsesLeft).toBe(0);
     s.hold(squatFrame(0), 6000);
     expect(s.commands.filter(command => command.type === 'recover')).toHaveLength(2);
+  });
+
+  it('recognizes a step while remaining upright to rearm the next recovery', () => {
+    const s = ready();
+    s.hold(squatFrame(0), RECOVERY.holdDurationMs);
+    s.hold(squatFrame(0), C.resolveMs + C.enemyTurnMs + C.betweenTurnsMs);
+    s.frame(squatFrame(0));
+    expect(s.state.recoveryNeedsMovement).toBe(true);
+    const moved = squatFrame(0);
+    moved.landmarks = moved.landmarks!.map(point => ({ ...point, x: point.x + .06 }));
+    s.frame(moved);
+    expect(s.state.phase).toBe('recovering');
+    expect(s.health.recoveryCharges).toBe(2);
   });
 
   it.each(['playerHp', 'enemyHp'] as const)('stops pending recovery when %s reaches zero', key => {

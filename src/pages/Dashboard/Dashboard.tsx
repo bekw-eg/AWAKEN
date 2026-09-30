@@ -87,7 +87,7 @@ export function Dashboard() {
   return <MotionProvider reduced={preferences.reducedMotion}><AppShell page={page} battle={inArena} player={inArena && terminalState ? terminalState.player : state.player} onNavigate={navigate} reducedMotion={preferences.reducedMotion}>
     {storageError && <p className="error-detail" role="status">Progress could not be saved in this browser. Keep this tab open to retain your current session.</p>}
     <div className="page-motion" key={viewKey}>
-    {inArena ? <BattleScreen state={terminalState ?? state} terminal={!!presentedOutcome} repeated={repeated} onExerciseEvent={handleExerciseEvent} onEnemyAttack={enemyAttack} onRecover={recover} onRoundDeathComplete={completeRoundDeath} onNextRound={startNextRound} onFlee={() => navigate('journey')} {...cameraPreferences} />
+    {inArena ? <BattleScreen state={terminalState ?? state} terminal={!!presentedOutcome} repeated={repeated} onExerciseEvent={handleExerciseEvent} onEnemyAttack={enemyAttack} onRecover={recover} onRoundDeathComplete={completeRoundDeath} onNextRound={startNextRound} onSkipRound={() => navigate('home')} onFlee={() => navigate('journey')} {...cameraPreferences} />
       : outcome ? <BattleResult outcome={outcome} player={state.player} onContinue={() => navigate('journey')} onRetry={enterBattle} />
       : page === 'training' ? <>
         <PageHeader eyebrow="TRAINING / REAL-WORLD INPUT" title="Your body is the controller." description="Choose a movement. Find your form. Build your next level."><span className="badge badge-accent"><Icon name="TrendingUp" />+15 XP / REP</span></PageHeader>

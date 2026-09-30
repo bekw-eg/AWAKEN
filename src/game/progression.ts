@@ -21,7 +21,7 @@ export function generateEnemy(index: number): Enemy {
     name: isBoss ? `BOSS ${Math.floor(index/10)}` : `Enemy ${index}`,
     hp: Math.floor((isBoss ? 200 : 50) * multiplier),
     maxHp: Math.floor((isBoss ? 200 : 50) * multiplier),
-    attack: Math.floor((isBoss ? 15 : 5) * multiplier),
+    attack: Math.floor((isBoss ? 15 * 0.7 : 5) * multiplier),
     defense: Math.floor((isBoss ? 10 : 2) * multiplier),
     isBoss
   };
