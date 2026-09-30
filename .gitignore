@@ -4,3 +4,6 @@ dist/
 public/mediapipe/
 *.log
 coverage/
+%SystemDrive%/
+ProgramData/
+*.db
