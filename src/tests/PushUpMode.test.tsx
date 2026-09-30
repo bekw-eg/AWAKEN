@@ -8,11 +8,53 @@ import { SquatSequence } from './fixtures/squatFrames';
 import { closedFrame, openFrame } from './fixtures/jumpingJackFrames';
 import { BattleOverlay } from '../components/BattleScreen/BattleOverlay';
 import type { BattleOverlayState } from '../game/battleOverlay';
+import type { FormFeedback } from '../exercise-engine/formFeedback';
 
 vi.mock('../hooks/usePoseDetection');
-vi.mock('../components/PoseOverlay/PoseOverlay', () => ({ PoseOverlay: () => null }));
+vi.mock('../components/PoseOverlay/PoseOverlay', () => ({ PoseOverlay: ({ feedback }: { feedback: FormFeedback }) =>
+  <div data-testid="pose-overlay" data-status={feedback.status} data-regions={feedback.regions?.join(',')} /> }));
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => { cleanup(); vi.useRealTimers(); });
+it('renders the stable feedback in both canvas input and debug, logging transitions only', () => {
+  window.history.replaceState(null, '', '/?poseDebug=1');
+  const log = vi.spyOn(console, 'debug').mockImplementation(() => {});
+  const pose: UsePoseDetectionResult = {
+    landmarks: closedFrame.landmarks as UsePoseDetectionResult['landmarks'],
+    worldLandmarks: closedFrame.worldLandmarks as UsePoseDetectionResult['worldLandmarks'],
+    poseTimestampMs: 10, cameraStatus: 'active', engineStatus: 'active', videoSize: { width: 1280, height: 720 },
+    error: null, isLoading: false, isPersonDetected: true,
+  };
+  vi.mocked(usePoseDetection).mockReturnValue(pose);
+  const onPoseFrame = vi.fn(), onExerciseEvent = vi.fn();
+  const element = (feedback: FormFeedback, reliable = true) => <CameraView onExerciseEvent={onExerciseEvent}
+    onPoseFrame={onPoseFrame} formFeedback={feedback} formFeedbackSource="strong:performing_attack" formFeedbackReliable={reliable} />;
+  try {
+    const view = render(element({ status: 'correct' }));
+    expect(screen.getByLabelText('Pose feedback debug').textContent).toContain('Raw status: correct\nStable status: neutral');
+    act(() => vi.advanceTimersByTime(200));
+    expect(screen.getByTestId('pose-overlay').getAttribute('data-status')).toBe('correct');
+    const count = log.mock.calls.length;
+    for (let i = 0; i < 5; i++) {
+      view.rerender(element({ status: 'correct' }));
+      act(() => vi.advanceTimersByTime(50));
+    }
+    expect(log).toHaveBeenCalledTimes(count);
+    view.rerender(element({ status: 'error', regions: ['arms'], message: 'arms' }));
+    act(() => vi.advanceTimersByTime(50));
+    expect(screen.getByTestId('pose-overlay').getAttribute('data-status')).toBe('correct');
+    view.rerender(element({ status: 'correct' }));
+    view.rerender(element({ status: 'neutral' }, false));
+    act(() => vi.advanceTimersByTime(100));
+    expect(screen.getByTestId('pose-overlay').getAttribute('data-status')).toBe('correct');
+    expect(screen.getByLabelText('Pose feedback debug').textContent).toContain('Tracking reliable: false');
+    act(() => vi.advanceTimersByTime(150));
+    expect(screen.getByTestId('pose-overlay').getAttribute('data-status')).toBe('neutral');
+    expect(onPoseFrame).toHaveBeenCalledTimes(1);
+    expect(onExerciseEvent).not.toHaveBeenCalled();
+  } finally {
+    window.history.replaceState(null, '', '/'); log.mockRestore();
+  }
+});
 it('keeps the video and pose feed mounted across announcements and renders unmirrored form hints', () => {
   const pose: UsePoseDetectionResult = {
     landmarks: closedFrame.landmarks as UsePoseDetectionResult['landmarks'],
@@ -23,7 +65,7 @@ it('keeps the video and pose feed mounted across announcements and renders unmir
   vi.mocked(usePoseDetection).mockReturnValue(pose);
   const onPoseFrame = vi.fn(), onExerciseEvent = vi.fn();
   const element = (announcement: BattleOverlayState | null) => <CameraView onExerciseEvent={onExerciseEvent}
-    onPoseFrame={onPoseFrame} mirrored formFeedback={{ status: 'error', regions: ['arms'], message: 'Выпрями руки' }}>
+    onPoseFrame={onPoseFrame} mirrored formFeedbackReliable formFeedback={{ status: 'error', regions: ['arms'], message: 'Выпрями руки' }}>
     <BattleOverlay announcement={announcement} />
   </CameraView>;
   const view = render(element({ type: 'countdown', text: '3' }));

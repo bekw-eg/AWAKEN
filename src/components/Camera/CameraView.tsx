@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ExerciseEvent, ExerciseType } from '../../game/types';
 import type { PushUpFrame } from '../../exercise-engine/pushUpTypes';
+import type { BattleSnapshot } from '../../game/handsFreeBattleController';
 import { toFormFeedback, type FormFeedback } from '../../exercise-engine/formFeedback';
 import { useStableFormFeedback } from '../../hooks/useStableFormFeedback';
 import { useSquatGameEvents } from '../../hooks/useSquatGameEvents';
@@ -38,9 +39,11 @@ type Props = {
   trackingPanel?: ReactNode;
   formFeedback?: FormFeedback;
   formFeedbackSource?: string;
+  formFeedbackReliable?: boolean;
+  poseDebugContext?: BattleSnapshot;
 };
 
-export function CameraView({ onExerciseEvent, children, forcedExerciseType, onExerciseChange, hideSelector, autoStart = true, mirrored = true, suspended = false, onPoseFrame, trackingPanel, formFeedback, formFeedbackSource }: Props) {
+export function CameraView({ onExerciseEvent, children, forcedExerciseType, onExerciseChange, hideSelector, autoStart = true, mirrored = true, suspended = false, onPoseFrame, trackingPanel, formFeedback, formFeedbackSource, formFeedbackReliable, poseDebugContext }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [enabled, setEnabled] = useState(autoStart);
   const [restartKey, setRestartKey] = useState(0);
@@ -74,8 +77,26 @@ export function CameraView({ onExerciseEvent, children, forcedExerciseType, onEx
   useSquatGameEvents(jumpingJack.repCount, jumpingJack.repJustCounted, confirmRep, 'jumping-jack');
   useSquatGameEvents(pushUp.repCount, pushUp.repJustCounted, confirmRep, 'push-up');
   const result = exerciseType === 'squat' ? squat : exerciseType === 'jumping-jack' ? jumpingJack : pushUp;
-  const displayedForm = useStableFormFeedback(formFeedback ?? toFormFeedback(exerciseType, result),
-    active && isPersonDetected && !suspended, formFeedbackSource ?? exerciseType);
+  const rawForm = formFeedback ?? toFormFeedback(exerciseType, result);
+  const feedbackReliable = isPersonDetected && (formFeedbackReliable ?? result.trackingStatus === 'ready');
+  const displayedForm = useStableFormFeedback(rawForm,
+    active && !suspended, formFeedbackSource ?? exerciseType, feedbackReliable);
+  const debug = import.meta.env.DEV && ['poseDebug', 'battleDebug'].some(key => new URLSearchParams(window.location.search).has(key));
+  const previousDebug = useRef<Record<string, string | boolean> | null>(null);
+  const candidate = poseDebugContext?.candidate ?? 'none';
+  const stableRegions = displayedForm.regions?.join(',') ?? 'none';
+  const debugPhase = poseDebugContext?.phase ?? 'training';
+  useEffect(() => {
+    if (!debug) return;
+    const next = { phase: debugPhase, source: formFeedbackSource ?? exerciseType, status: displayedForm.status,
+      regions: stableRegions, candidate, tracking: feedbackReliable };
+    for (const [key, value] of Object.entries(next)) {
+      if (previousDebug.current && previousDebug.current[key] !== value) {
+        console.debug(`[pose] ${key}: ${previousDebug.current[key]} → ${value}`);
+      }
+    }
+    previousDebug.current = next;
+  }, [debug, debugPhase, formFeedbackSource, exerciseType, displayedForm.status, stableRegions, candidate, feedbackReliable]);
   const stopped = cameraStatus === 'idle' && engineStatus === 'idle' && !error;
   const heading = error ? (error.startsWith('CAMERA ACCESS REQUIRED') ? 'CAMERA ACCESS REQUIRED' : 'CAMERA INTERRUPTED')
     : engineStatus === 'loading' ? 'LOADING POSE MODEL'
@@ -109,7 +130,7 @@ export function CameraView({ onExerciseEvent, children, forcedExerciseType, onEx
           <div className="camera-stage" style={{ aspectRatio: `${videoSize.width} / ${videoSize.height}` }}>
             <div className={`camera-feed${mirrored ? ' mirrored-feed' : ''}`}>
               <video ref={videoRef} autoPlay playsInline muted aria-label="Live webcam" />
-              <PoseOverlay landmarks={landmarks} width={videoSize.width} height={videoSize.height} feedback={displayedForm} />
+              <PoseOverlay landmarks={landmarks} width={videoSize.width} height={videoSize.height} feedback={displayedForm} enabled={active && !suspended} />
             </div>
             {/* Outside the mirrored feed: stable placement keeps the hint readable and still. */}
             {(displayedForm.status === 'error' || displayedForm.status === 'warning') && displayedForm.message &&
@@ -117,6 +138,17 @@ export function CameraView({ onExerciseEvent, children, forcedExerciseType, onEx
                 <span>{displayedForm.status === 'error' ? 'FORM ERROR' : 'CHECK FORM'}</span>{displayedForm.message}
               </div>}
             <div className="frame-corners" aria-hidden="true" />
+            {debug && <pre className="pose-debug" aria-label="Pose feedback debug">{[
+              `Battle phase: ${debugPhase}`, `Selected attack: ${poseDebugContext?.selectedAttack ?? 'none'}`,
+              `Raw status: ${rawForm.status}`, `Stable status: ${displayedForm.status}`,
+              `Candidate: ${candidate}`, `Visual candidate: ${poseDebugContext?.visualCandidate ?? 'none'}`,
+              `Visual candidate duration: ${Math.round(poseDebugContext?.candidateDurationMs ?? 0)} ms`,
+              `Raw regions: ${rawForm.regions?.join(',') || 'none'}`, `Stable regions: ${stableRegions || 'none'}`,
+              `Tracking reliable: ${feedbackReliable}`, `Pushup ready raw: ${poseDebugContext?.pushupReadyRaw ?? 'unknown'}`,
+              `Pushup ready hysteresis: ${poseDebugContext?.pushupReadyVisual ?? false}`,
+              `Pushup ready stable: ${!!(displayedForm.status === 'correct' && (poseDebugContext?.activeDetector === 'push-up-ready' || poseDebugContext?.phase === 'selecting_attack' && displayedForm.regions?.includes('torso')))}`,
+              `Active detector: ${poseDebugContext?.activeDetector ?? exerciseType}`,
+            ].join('\n')}</pre>}
             {showLoading && <div className={`camera-loading${active ? ' camera-ready' : ''}`}><LoadingScreen compact ready={active} progress={initializationProgress} status={active ? 'READY' : heading} /></div>}
             {(error || stopped) && <div className="stage-message">
               <Icon name={error ? 'CameraOff' : 'Camera'} />

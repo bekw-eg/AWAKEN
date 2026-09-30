@@ -158,6 +158,30 @@ describe('hands-free orchestration using the real exercise detectors', () => {
     s.pushup(); expect(s.attacks).toHaveLength(1); expect(s.state.reps).toBe(1);
   });
 
+  it('keeps visual plank readiness through elbow jitter without counting invalid hold time', () => {
+    const s = new BattleSequence(); s.start(); s.hold(pushUpFrame(0, { elbow: 161 }), 200);
+    for (let i = 0; i < 20; i++) {
+      s.frame(pushUpFrame(0, { elbow: i % 2 ? 161 : 159 }));
+      expect(s.state.formFeedback.status).toBe('correct');
+      expect(s.state.visualCandidate).toBe('strong');
+      expect(s.state.pushupReadyVisual).toBe(true);
+    }
+    expect(s.state.selectedAttack).toBeNull(); expect(s.commands).toEqual([]);
+    s.hold(pushUpFrame(0, { leftConfidence: 0.1, rightConfidence: 0.1 }), 350);
+    expect(s.state.pushupReadyRaw).toBeNull(); expect(s.state.pushupReadyVisual).toBe(false);
+    s.frame(pushUpFrame(0, { elbow: 159 }));
+    expect(s.state.pushupReadyVisual).toBe(false);
+    s.hold(pushUpFrame(0), 750); expect(s.state.selectedAttack).toBe('strong');
+  });
+
+  it('does not expose exercise errors or idle green while selecting an attack', () => {
+    const s = new BattleSequence(); s.start(squatFrame(0)); s.hold(squatFrame(0), 1600);
+    expect(s.state.formFeedback.status).toBe('neutral');
+    s.hold(lowArmsFrame, 1400);
+    expect(s.state.formError).toBe(false); expect(s.state.formFeedback.status).not.toBe('error');
+    expect(s.state.selectedAttack).toBeNull(); expect(s.attacks).toHaveLength(0);
+  });
+
   it.each([lowArmsFrame, narrowLegsFrame])('retains jack form errors without awarding a rep', bad => {
     const s = new BattleSequence(); s.start(); s.jack(); s.prepare(closedFrame);
     s.hold(bad, 1200); expect(s.state.formError).toBe(true); expect(s.state.feedback).toBeTruthy();

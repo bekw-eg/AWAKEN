@@ -59,3 +59,4 @@
   .detection-banner small { display: none; }
   .system-footer { flex-wrap: wrap; gap: 4px 8px; }
 }
+.pose-debug { position: absolute; top: 8px; left: 8px; z-index: 5; max-height: 90%; max-width: calc(100% - 16px); overflow: auto; margin: 0; padding: 8px; background: #071322dd; color: #dcecff; font: 11px/1.4 monospace; pointer-events: none; }

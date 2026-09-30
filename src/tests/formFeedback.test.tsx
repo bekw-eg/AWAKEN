@@ -38,6 +38,8 @@ it('debounces error appearance and clearing without postponing on every pose ren
   vi.useFakeTimers();
   const { result, rerender } = renderHook(({ feedback, source, enabled }) => useStableFormFeedback(feedback, enabled, source),
     { initialProps: { feedback: CORRECT_FORM, source: 'squat', enabled: true } });
+  expect(result.current.status).toBe('neutral');
+  act(() => vi.advanceTimersByTime(200));
   expect(result.current.status).toBe('correct');
   for (let i = 0; i < 5; i++) {
     rerender({ feedback: { ...error, regions: ['arms'] }, source: 'squat', enabled: true });
@@ -58,6 +60,7 @@ it('debounces error appearance and clearing without postponing on every pose ren
 });
 
 it('uses theme colors on the actual canvas bones and joints and clears lost poses', () => {
+  vi.useFakeTimers();
   const strokes: string[] = [], fills: string[] = [];
   const ctx = { clearRect: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), arc: vi.fn(),
     strokeStyle: '', fillStyle: '', shadowColor: '', shadowBlur: 0, lineWidth: 0, lineCap: '',
@@ -75,5 +78,49 @@ it('uses theme colors on the actual canvas bones and joints and clears lost pose
   expect(fills[13]).toBe('#ef4444'); expect(fills[27]).toBe('#58a6ff');
   strokes.length = 0;
   view.rerender(<PoseOverlay landmarks={null} width={640} height={480} feedback={NEUTRAL_FORM} />);
-  expect(strokes).toHaveLength(0); expect(ctx.clearRect).toHaveBeenCalledTimes(3);
+  expect(strokes.length).toBeGreaterThan(0); expect(ctx.clearRect).toHaveBeenCalledTimes(3);
+  act(() => vi.advanceTimersByTime(250));
+  expect(ctx.clearRect).toHaveBeenCalledTimes(4);
+  strokes.length = 0;
+  view.rerender(<PoseOverlay landmarks={null} width={640} height={480} feedback={CORRECT_FORM} />);
+  expect(strokes).toHaveLength(0);
+});
+
+it('holds colors across brief uncertainty, expires without more frames, and cancels timers on unmount', () => {
+  vi.useFakeTimers();
+  const { result, rerender, unmount } = renderHook(({ reliable, source }) => useStableFormFeedback(CORRECT_FORM, true, source, reliable),
+    { initialProps: { reliable: true, source: 'selection' } });
+  act(() => vi.advanceTimersByTime(200)); expect(result.current.status).toBe('correct');
+  rerender({ reliable: false, source: 'selection' });
+  act(() => vi.advanceTimersByTime(100)); expect(result.current.status).toBe('correct');
+  rerender({ reliable: true, source: 'selection' });
+  expect(result.current.status).toBe('correct');
+  rerender({ reliable: false, source: 'selection' });
+  act(() => vi.advanceTimersByTime(250)); expect(result.current.status).toBe('neutral');
+  rerender({ reliable: true, source: 'selection' });
+  act(() => vi.advanceTimersByTime(200)); expect(result.current.status).toBe('correct');
+  rerender({ reliable: true, source: 'strong:performing_attack' });
+  expect(result.current.status).toBe('neutral');
+  unmount(); expect(vi.getTimerCount()).toBe(0);
+});
+
+it('keeps visible bones across confidence jitter and clears immediately when disabled', () => {
+  const ctx = { clearRect: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), arc: vi.fn(), stroke: vi.fn(), fill: vi.fn() };
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
+  const points = (visibility: number) => pushUpFrame(0).landmarks!.map(p => ({ ...p, visibility })) as NormalizedLandmark[];
+  const view = render(<PoseOverlay landmarks={points(0.6)} width={640} height={480} />);
+  const bones = ctx.stroke.mock.calls.length;
+  expect(bones).toBeGreaterThan(0);
+  for (const visibility of [0.49, 0.51, 0.49]) {
+    ctx.stroke.mockClear(); view.rerender(<PoseOverlay landmarks={points(visibility)} width={640} height={480} />);
+    expect(ctx.stroke).toHaveBeenCalledTimes(bones);
+  }
+  ctx.stroke.mockClear(); view.rerender(<PoseOverlay landmarks={points(0.3)} width={640} height={480} />);
+  expect(ctx.stroke).not.toHaveBeenCalled();
+  view.rerender(<PoseOverlay landmarks={points(0.51)} width={640} height={480} />);
+  expect(ctx.stroke).not.toHaveBeenCalled();
+  view.rerender(<PoseOverlay landmarks={points(0.6)} width={640} height={480} />);
+  expect(ctx.stroke).toHaveBeenCalledTimes(bones);
+  ctx.stroke.mockClear(); view.rerender(<PoseOverlay landmarks={points(0.6)} width={640} height={480} enabled={false} />);
+  expect(ctx.stroke).not.toHaveBeenCalled();
 });

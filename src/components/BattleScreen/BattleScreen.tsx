@@ -31,7 +31,8 @@ export function BattleScreen({ state, onExerciseEvent, onEnemyAttack, onFlee, au
     </div>
     <CameraView onExerciseEvent={onExerciseEvent} onPoseFrame={onPoseFrame} forcedExerciseType={selectedExercise}
       hideSelector autoStart={autoStart} mirrored={mirrored} suspended={terminal}
-      formFeedback={snapshot.formFeedback} formFeedbackSource={snapshot.selectedAttack ?? snapshot.candidate ?? 'selection'}
+      formFeedback={snapshot.formFeedback} formFeedbackReliable={snapshot.feedbackReliable} poseDebugContext={snapshot}
+      formFeedbackSource={`${snapshot.selectedAttack ?? 'selection'}:${['waiting_for_neutral', 'exercise_prepare', 'exercise_announcement'].includes(snapshot.phase) ? 'prepare' : snapshot.phase}`}
       trackingPanel={<HandsFreeStatus battle={snapshot} debug={debug} />} />
   </div>;
 }

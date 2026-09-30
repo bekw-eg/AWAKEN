@@ -1,21 +1,26 @@
-import { useEffect, useState } from 'react';
-import { FORM_DISPLAY_CONFIG as C, NEUTRAL_FORM, type FormFeedback } from '../exercise-engine/formFeedback';
+import { useEffect, useRef, useState } from 'react';
+import { NEUTRAL_FORM, type FormFeedback } from '../exercise-engine/formFeedback';
+import { PoseFeedbackController } from '../exercise-engine/poseFeedbackController';
 
-/** Only display is debounced. Rep validation remains immediate in the detectors. */
-export function useStableFormFeedback(feedback: FormFeedback, enabled: boolean, source: string): FormFeedback {
-  const [shown, setShown] = useState<{ source: string; feedback: FormFeedback }>({ source, feedback: NEUTRAL_FORM });
-  const regions = (feedback.regions ?? []).join(',');
-  const status = feedback.status, message = feedback.message;
+/** One bounded timeout for display transitions; the pose loop still owns inference. */
+export function useStableFormFeedback(feedback: FormFeedback, enabled: boolean, source: string, reliable = true): FormFeedback {
+  const controller = useRef({ source, value: new PoseFeedbackController() });
+  const [shown, setShown] = useState({ source, feedback: NEUTRAL_FORM });
+  const regions = [...new Set(feedback.regions ?? [])].sort().join(',');
+  const { status, message } = feedback;
   useEffect(() => {
+    if (!enabled || controller.current.source !== source) controller.current = { source, value: new PoseFeedbackController() };
     if (!enabled) { setShown({ source, feedback: NEUTRAL_FORM }); return; }
-    const next: FormFeedback = { status, message, regions: regions ? regions.split(',') as FormFeedback['regions'] : [] };
-    const isProblem = status === 'error' || status === 'warning';
-    const wasProblem = shown.source === source && (shown.feedback.status === 'error' || shown.feedback.status === 'warning');
-    if (!isProblem && !wasProblem) { setShown({ source, feedback: next }); return; }
-    const timer = setTimeout(() => setShown({ source, feedback: next }), isProblem ? C.errorHoldMs : C.clearDelayMs);
+    const raw: FormFeedback = { status, message, regions: regions ? regions.split(',') as FormFeedback['regions'] : [] };
+    let timer: ReturnType<typeof setTimeout>;
+    const update = () => {
+      const value = controller.current.value;
+      const next = value.update(raw, reliable, performance.now());
+      setShown(previous => previous.source === source && previous.feedback === next ? previous : { source, feedback: next });
+      if (value.nextUpdateMs !== null) timer = setTimeout(update, value.nextUpdateMs);
+    };
+    update();
     return () => clearTimeout(timer);
-    // Output state deliberately excluded: committing feedback must not restart its timer.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, message, regions, enabled, source]);
+  }, [status, message, regions, enabled, source, reliable]);
   return enabled && shown.source === source ? shown.feedback : NEUTRAL_FORM;
 }

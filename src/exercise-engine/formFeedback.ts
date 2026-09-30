@@ -4,10 +4,10 @@ import type { PushUpErrorCode } from './pushUpTypes';
 
 export type FormStatus = 'neutral' | 'correct' | 'warning' | 'error';
 export type BodyRegion = 'left_arm' | 'right_arm' | 'arms' | 'torso' | 'hips' | 'left_leg' | 'right_leg' | 'legs' | 'full_body';
-export type FormFeedback = { status: FormStatus; message?: string; regions?: readonly BodyRegion[] };
+export type FormFeedback = { status: FormStatus; message?: string; regions?: readonly BodyRegion[]; baseStatus?: 'neutral' | 'correct' };
 export const NEUTRAL_FORM: FormFeedback = { status: 'neutral' };
 export const CORRECT_FORM: FormFeedback = { status: 'correct' };
-export const FORM_DISPLAY_CONFIG = { errorHoldMs: 250, clearDelayMs: 200 } as const;
+export const FORM_DISPLAY_CONFIG = { correctEnterMs: 200, errorHoldMs: 250, clearDelayMs: 200, trackingGraceMs: 250 } as const;
 // Canvas reads these theme variables; CSS also uses them for the readable hint.
 export const POSE_COLORS = { neutral: '--pose-neutral', correct: '--pose-correct', warning: '--pose-warning', error: '--pose-error' } as const;
 
@@ -25,6 +25,7 @@ export const ERROR_REGION_MAP = {
 export function toFormFeedback(exercise: ExerciseType, result: {
   formStatus: 'idle' | 'good' | 'error'; errorCode: string | null; feedback: string | null; trackingStatus: string; phase?: string;
 }): FormFeedback {
+  if (result.trackingStatus !== 'ready') return NEUTRAL_FORM;
   if (result.formStatus === 'error' && result.errorCode) {
     const map: Record<string, readonly BodyRegion[]> = ERROR_REGION_MAP[exercise];
     return { status: 'error', message: result.feedback ?? undefined, regions: map[result.errorCode] ?? [] };
@@ -50,7 +51,8 @@ function affected(start: number, end: number | undefined, regions: readonly Body
 }
 export function poseColorStatus(feedback: FormFeedback, start: number, end?: number): FormStatus {
   if (feedback.status === 'error' || feedback.status === 'warning') {
-    return affected(start, end, feedback.regions) ? feedback.status : 'neutral';
+    return affected(start, end, feedback.regions) ? feedback.status : feedback.baseStatus ?? 'neutral';
   }
+  if (feedback.status === 'correct' && feedback.regions?.length) return affected(start, end, feedback.regions) ? 'correct' : 'neutral';
   return feedback.status;
 }
