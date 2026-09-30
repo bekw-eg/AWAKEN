@@ -244,6 +244,8 @@ export class HandsFreeBattleController {
         }
         break;
       case 'resolving_recovery':
+        if (elapsed >= C.resolveMs) this.enter('selecting_attack', now);
+        break;
       case 'resolving_attack':
         if (elapsed >= C.resolveMs) { this.enter('enemy_turn', now); return [{ type: 'enemy_attack' }]; }
         break;

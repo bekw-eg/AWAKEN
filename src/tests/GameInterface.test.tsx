@@ -157,7 +157,7 @@ it('completes all encounters with hands-free attacks and waits for boss death be
   }
 }, 20000);
 
-it('requires fresh movement before repeating recovery after the boss strike', () => {
+it('keeps the player turn after recovery and requires fresh movement to heal again before attacking the boss', () => {
   const initial = progression.createGameState();
   vi.spyOn(progression, 'createGameState').mockImplementation(() => ({ ...initial, currentEnemyIndex: 10, recoveryCharges: 3,
     player: { ...initial.player, hp: 24 } }));
@@ -172,25 +172,36 @@ it('requires fresh movement before repeating recovery after the boss strike', ()
   expect(hp('Player')).toBe(74);
   expect(screen.getByTestId('battle-overlay').textContent).toContain('+50 HP');
   expect(screen.getByTestId('battle-overlay').textContent).toContain('50% MAX HP');
+  expect(screen.getByTestId('battle-overlay').textContent).toContain('YOUR TURN');
   act(() => vi.advanceTimersByTime(1500));
-  expect(hp('Player')).toBe(45); expect(hp('BOSS 1')).toBe(600);
+  expect(hp('Player')).toBe(74); expect(hp('BOSS 1')).toBe(600);
+  expect(document.querySelector('.boss-scene')?.getAttribute('data-state')).toBe('idle');
   act(() => vi.advanceTimersByTime(2700));
   expect(screen.getByText('2 / 3 CHARGES · 1 / 2 USES LEFT THIS FIGHT')).toBeTruthy();
   hold(squatFrame(0), 6000);
-  expect(hp('Player')).toBe(45);
+  expect(hp('Player')).toBe(74);
   expect(phase()).toBe('selecting_attack');
   expect(screen.getByText('MOVE, THEN STAND STILL TO RECOVER AGAIN')).toBeTruthy();
   const movement = squatFrame(0);
   movement.landmarks = movement.landmarks!.map((point, id) => [15, 16].includes(id) ? { ...point, y: .1 } : point);
   frame(movement);
   hold(squatFrame(0), 5050);
-  expect(hp('Player')).toBe(95);
+  expect(hp('Player')).toBe(100);
+  expect(screen.getByTestId('battle-overlay').textContent).toContain('+26 HP');
   act(() => vi.advanceTimersByTime(4200));
-  expect(hp('Player')).toBe(66);
+  expect(hp('Player')).toBe(100);
   expect(screen.getByText('FIGHT LIMIT REACHED')).toBeTruthy();
   expect(screen.getByText('1 / 3 CHARGES · 0 / 2 USES LEFT THIS FIGHT')).toBeTruthy();
   hold(squatFrame(0), 6000);
-  expect(hp('Player')).toBe(66);
+  expect(hp('Player')).toBe(100);
+  hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup();
+  expect(hp('Player')).toBe(100); expect(hp('BOSS 1')).toBe(556);
+  act(() => vi.advanceTimersByTime(1500));
+  expect(hp('Player')).toBe(71);
+  expect(phase()).toBe('enemy_turn');
+  act(() => vi.advanceTimersByTime(2700));
+  hold(squatFrame(0), 6000);
+  expect(hp('Player')).toBe(71);
 });
 
 it('cancels the countdown on movement, heals only missing HP in round one and exhausts its charge', () => {
@@ -212,9 +223,13 @@ it('cancels the countdown on movement, heals only missing HP in round one and ex
   expect(hp('Player')).toBe(100);
   expect(screen.getByTestId('battle-overlay').textContent).toContain('+5 HP');
   act(() => vi.advanceTimersByTime(4200));
-  expect(hp('Player')).toBe(96); expect(hp('Enemy 1')).toBe(60);
+  expect(hp('Player')).toBe(100); expect(hp('Enemy 1')).toBe(60);
   expect(screen.getByText('NO CHARGES · EARN IN TRAINING')).toBeTruthy();
   hold(squatFrame(0), 6000);
+  expect(hp('Player')).toBe(100);
+  hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup();
+  expect(hp('Player')).toBe(100); expect(hp('Enemy 1')).toBe(16);
+  act(() => vi.advanceTimersByTime(1500));
   expect(hp('Player')).toBe(96);
 });
 

@@ -27,7 +27,7 @@ export function useBossAnimation(enemy: Enemy | null, phase: BattlePhase, termin
   }, [id, hp, phase, stopped]);
 
   useEffect(() => {
-    if (stopped || (phase !== 'resolving_attack' && phase !== 'resolving_recovery')) return;
+    if (stopped || phase !== 'resolving_attack') return;
     // The controller applies enemy damage when resolveMs expires. Start the
     // visual early enough for its impact to coincide with that transition.
     const state = strikes.current % 2 ? 'heavyAttack' : 'attack';

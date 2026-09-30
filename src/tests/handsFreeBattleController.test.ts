@@ -61,9 +61,32 @@ describe('hands-free recovery turns', () => {
     expect(s.state.recoveryHealedHp).toBe(recoveryHealPercent(round));
     expect(s.health.recoveryCharges).toBe(2);
     s.hold(squatFrame(0), C.resolveMs);
-    expect(s.commands).toEqual([{ type: 'recover', useNumber: 1 }, { type: 'enemy_attack' }]);
-    s.hold(squatFrame(0), C.enemyTurnMs);
-    expect(s.commands).toHaveLength(2);
+    expect(s.state.phase).toBe('selecting_attack');
+    s.hold(squatFrame(0), 10000);
+    expect(s.commands).toEqual([{ type: 'recover', useNumber: 1 }]);
+    expect(s.state.phase).toBe('selecting_attack');
+  });
+
+  it.each(['basic', 'fast', 'strong'] as const)('keeps the player turn after healing until the %s attack is completed', attack => {
+    const s = ready();
+    s.hold(squatFrame(0), RECOVERY.holdDurationMs + C.resolveMs);
+    expect(s.state.phase).toBe('selecting_attack');
+    s.hold(squatFrame(0), 1600);
+    s.commands = [];
+    if (attack === 'basic') s.squat();
+    else if (attack === 'fast') s.jack();
+    else s.hold(pushUpFrame(0), 800);
+    expect(s.state.selectedAttack).toBe(attack);
+    s.prepare(attack === 'basic' ? squatFrame(0) : attack === 'fast' ? closedFrame : pushUpFrame(0));
+    if (attack === 'basic') s.squat();
+    else if (attack === 'strong') s.pushup();
+    else for (let n = 0; n < 5; n++) s.jack();
+    expect(s.state.phase).toBe('resolving_attack');
+    expect(s.attacks).toHaveLength(1);
+    expect(s.commands.some(command => command.type === 'enemy_attack')).toBe(false);
+    s.hold(pushUpFrame(0), C.resolveMs);
+    expect(s.commands.filter(command => command.type === 'enemy_attack')).toHaveLength(1);
+    expect(s.state.phase).toBe('enemy_turn');
   });
 
   it.each(['empty', 'full', 'limit'] as const)('does not start or spend a charge when %s', reason => {

@@ -13,7 +13,7 @@ export function HandsFreeStatus({ battle, debug = false }: {
     phase === 'performing_attack' ? battle.go ? 'GO!' : `${attack?.name} ATTACK` :
     phase === 'resolving_attack' ? `${attack?.name} ATTACK · HIT!` : phase === 'enemy_turn' ? 'ENEMY TURN' : phase.toUpperCase();
   const guidance = phase === 'recovering' ? 'Stand upright with your arms down. Move to cancel and choose an attack.' :
-    phase === 'resolving_recovery' ? `+${battle.recoveryHealedHp} HP · ENEMY PREPARES TO STRIKE` :
+    phase === 'resolving_recovery' ? `+${battle.recoveryHealedHp} HP · YOUR TURN · CHOOSE AN ATTACK` :
     phase === 'camera_setup' ? 'Allow your camera and show your full body.' : phase === 'battle_intro' ? 'BATTLE START' :
     phase === 'selecting_attack' ? 'MOVE TO ATTACK · STAND STILL TO RECOVER' : phase === 'attack_confirmed' ? 'Selection complete. The next reps power your attack.' :
     phase === 'waiting_for_neutral' || phase === 'exercise_prepare' || phase === 'exercise_announcement' ? attack?.neutral :
