@@ -1,115 +1,98 @@
 import { StrictMode, type ReactNode } from 'react';
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ExerciseEvent, ExerciseType } from '../game/types';
 import type { CameraTelemetry } from '../components/Camera/CameraView';
+import type { PushUpFrame } from '../exercise-engine/pushUpTypes';
 import { Dashboard } from '../pages/Dashboard/Dashboard';
+import { SquatSequence, squatFrame } from './fixtures/squatFrames';
+import { PushUpSequence, pushUpFrame } from './fixtures/pushUpFrames';
+import { closedFrame, openFrame } from './fixtures/jumpingJackFrames';
 
-// Camera/detector integration is covered with real pose sequences in PushUpMode.test.tsx.
-// This boundary supplies correct reps to the real game reducer, navigation, and battle UI.
+// Feed real pose sequences at the camera boundary. Controller, detectors, game
+// reducer, dashboard terminal presentation, and StrictMode lifecycle stay real.
+let poseSink: ((frame: PushUpFrame) => void) | undefined;
 vi.mock('../components/Camera/CameraView', () => ({
-  CameraView: ({ onExerciseEvent, forcedExerciseType = 'squat', children, autoStart, mirrored }: {
+  CameraView: ({ onExerciseEvent, forcedExerciseType = 'squat', children, autoStart, mirrored, onPoseFrame, trackingPanel }: {
     onExerciseEvent: (event: ExerciseEvent) => void; forcedExerciseType?: ExerciseType;
     children?: ReactNode | ((telemetry: CameraTelemetry) => ReactNode); autoStart: boolean; mirrored: boolean;
-  }) => <div aria-label="Test camera" data-autostart={autoStart} data-mirrored={mirrored}>
-    <button onClick={() => onExerciseEvent({ exercise: forcedExerciseType, status: 'correct', timestamp: Date.now() })}>Complete correct rep</button>
-    <button onClick={() => onExerciseEvent({ exercise: forcedExerciseType, status: 'incorrect', timestamp: Date.now() })}>Incorrect rep</button>
-    {typeof children === 'function' ? children({ active: true, isPersonDetected: true, repCount: 0, phase: 'standing', trackingStatus: 'ready', formStatus: 'good' }) : children}
-  </div>,
+    onPoseFrame?: (frame: PushUpFrame) => void; trackingPanel?: ReactNode;
+  }) => {
+    poseSink = onPoseFrame;
+    return <div aria-label="Test camera" data-autostart={autoStart} data-mirrored={mirrored}>
+      {!onPoseFrame && <button onClick={() => onExerciseEvent({ exercise: forcedExerciseType, status: 'correct', timestamp: Date.now() })}>Complete correct rep</button>}
+      {trackingPanel}
+      {typeof children === 'function' ? children({ active: true, isPersonDetected: true, repCount: 0, phase: 'standing', trackingStatus: 'ready', formStatus: 'good' }) : children}
+    </div>;
+  },
 }));
 
 beforeEach(() => { vi.useFakeTimers(); vi.spyOn(window, 'scrollTo').mockImplementation(() => {}); });
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); poseSink = undefined; vi.useRealTimers(); });
 const start = () => { render(<StrictMode><Dashboard /></StrictMode>); fireEvent.click(screen.getByRole('button', { name: 'Enter battle' })); };
 const rep = () => fireEvent.click(screen.getByRole('button', { name: 'Complete correct rep' }));
 const hp = (name: string) => Number(screen.getByRole('progressbar', { name: `${name} HP` }).getAttribute('aria-valuenow'));
+const phase = () => document.querySelector('[data-phase]')?.getAttribute('data-phase');
+const frame = (pose: Omit<PushUpFrame, 'timestampMs'>) => {
+  act(() => vi.advanceTimersByTime(50));
+  act(() => poseSink?.({ ...pose, timestampMs: performance.now() }));
+};
+const hold = (pose: Omit<PushUpFrame, 'timestampMs'>, ms: number) => { for (let t = 0; t < ms; t += 50) frame(pose); };
+const jack = () => { hold(closedFrame, 300); hold(openFrame, 400); hold(closedFrame, 400); };
+const squat = () => { const s = new SquatSequence(); s.rep(); s.frames.forEach(frame); };
+const pushup = () => { const s = new PushUpSequence(); s.rep(); s.frames.forEach(frame); };
+const prepare = (pose: Omit<PushUpFrame, 'timestampMs'>) => {
+  for (let n = 0; n < 150 && phase() !== 'performing_attack'; n++) frame(pose);
+  expect(phase()).toBe('performing_attack');
+};
 
-it.each([
-  ['Push-up: Strong attack', 16], ['Jumping jack: Fast attack', 49], ['Squat: Basic attack', 38],
-])('selects %s and reflects the unchanged damage calculation', (attack, expectedHp) => {
-  start();
-  const button = screen.getByRole('button', { name: attack });
-  fireEvent.click(button);
-  expect(button.getAttribute('aria-pressed')).toBe('true');
-  fireEvent.click(screen.getByRole('button', { name: 'Incorrect rep' }));
-  expect(hp('Enemy 1')).toBe(60);
-  rep();
-  expect(hp('Enemy 1')).toBe(expectedHp);
-  expect(screen.getByText('ATTACK SUCCESSFUL')).toBeTruthy();
-  expect(button.getAttribute('data-state')).toBe('completed');
-  act(() => vi.advanceTimersByTime(1500));
-  expect(screen.queryByText('ATTACK SUCCESSFUL')).toBeNull();
-});
-
-it('clears the prior hit confirmation when a different attack is selected', () => {
-  start();
-  rep();
-  fireEvent.click(screen.getByRole('button', { name: 'Push-up: Strong attack' }));
-  expect(screen.getByRole('button', { name: 'Push-up: Strong attack' }).getAttribute('data-state')).toBe('selected');
-  expect(screen.queryByText('ATTACK SUCCESSFUL')).toBeNull();
-  expect(hp('Enemy 1')).toBe(38);
-});
-
-it('retains the enemy cadence, shows incoming damage, and stops timers after leaving', () => {
-  start();
-  act(() => vi.advanceTimersByTime(4999));
-  expect(hp('Player')).toBe(100);
-  act(() => vi.advanceTimersByTime(1));
-  expect(hp('Player')).toBe(96);
-  expect(screen.getByText('ENEMY STRIKE')).toBeTruthy();
-  // A player hit resets the existing enemy interval; preserve that behavior.
-  rep();
-  act(() => vi.advanceTimersByTime(4999));
-  expect(hp('Player')).toBe(96);
-  act(() => vi.advanceTimersByTime(1));
-  expect(hp('Player')).toBe(92);
-  fireEvent.click(screen.getAllByRole('button', { name: 'Journey' }).at(-1)!);
-  act(() => vi.advanceTimersByTime(500)); // Finish the topbar's last HP tween.
-  expect(vi.getTimerCount()).toBe(0);
-  act(() => vi.advanceTimersByTime(5000));
-  expect(screen.queryByRole('heading', { name: 'Defeated.' })).toBeNull();
-  expect(screen.getByRole('progressbar', { name: 'Journey completed encounters' }).getAttribute('aria-valuenow')).toBe('0');
-});
-
-it('presents defeat and retry without granting progress or changing restored health', () => {
-  start();
-  act(() => vi.advanceTimersByTime(125000));
-  expect(hp('Player')).toBe(0);
-  expect(screen.queryByRole('heading', { name: 'Defeated.' })).toBeNull();
-  act(() => vi.advanceTimersByTime(760));
-  expect(screen.getByRole('heading', { name: 'Defeated.' })).toBeTruthy();
-  expect(screen.getByText('Health restored to 100 HP')).toBeTruthy();
-  // jsdom schedules a selection-change task when the result heading receives focus.
-  act(() => vi.advanceTimersByTime(500)); // Restored HP is also animated in the topbar.
-  expect(vi.getTimerCount()).toBe(0);
-  fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-  expect(hp('Player')).toBe(100);
-  expect(hp('Enemy 1')).toBe(60);
-  fireEvent.click(screen.getAllByRole('button', { name: 'Journey' }).at(-1)!);
-  expect(screen.queryByRole('heading', { name: 'Defeated.' })).toBeNull();
-  expect(screen.getByRole('progressbar', { name: 'Journey completed encounters' }).getAttribute('aria-valuenow')).toBe('0');
-});
-
-it('completes all nine enemies and the boss, shows rewards, and returns to the existing next cycle', () => {
-  render(<StrictMode><Dashboard /></StrictMode>);
-  for (let encounter = 1; encounter <= 10; encounter++) {
-    fireEvent.click(screen.getByRole('button', { name: 'Enter battle' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Push-up: Strong attack' }));
-    for (let count = 0; count < 30 && !document.querySelector('.terminal-battle'); count++) rep();
-    expect(hp(encounter === 10 ? 'BOSS 1' : 'Enemy ' + encounter)).toBe(0);
-    expect(screen.queryByRole('heading', { name: encounter === 10 ? 'Boss defeated.' : 'Victory.' })).toBeNull();
-    act(() => vi.advanceTimersByTime(760));
-    expect(screen.getByRole('heading', { name: encounter === 10 ? 'Boss defeated.' : 'Victory.' })).toBeTruthy();
-    act(() => vi.advanceTimersByTime(1800));
-    expect(document.querySelector('.result-reward strong')?.textContent).toBe(encounter === 10 ? '+200' : '+50');
-    act(() => vi.advanceTimersByTime(40)); // Paint the new level's progress track.
-    expect(vi.getTimerCount()).toBe(0);
-    fireEvent.click(screen.getByRole('button', { name: 'Continue journey' }));
-    const map = screen.getByRole('list', { name: 'Campaign encounters' });
-    expect(within(map).getAllByRole('listitem')).toHaveLength(10);
-    expect(map.querySelector('[aria-current="step"]')?.textContent).toContain(encounter === 10 ? 'Enemy 1' : encounter === 9 ? 'BOSS 1' : `Enemy ${encounter + 1}`);
+it.each(['basic', 'fast', 'strong'])('selects %s with the body and sends a single set completion to the existing damage calculation', attack => {
+  start(); hold(squatFrame(0), 4800);
+  expect(screen.getByRole('heading', { name: 'SELECT YOUR ATTACK' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: /attack/i })).toBeNull();
+  if (attack === 'basic') squat();
+  else if (attack === 'fast') jack();
+  else hold(pushUpFrame(0), 800);
+  expect(screen.getByRole('heading', { name: `${attack.toUpperCase()} ATTACK SELECTED` })).toBeTruthy();
+  expect(hp('Enemy 1')).toBe(60); expect(hp('Player')).toBe(100);
+  prepare(attack === 'basic' ? squatFrame(0) : attack === 'fast' ? closedFrame : pushUpFrame(0));
+  expect(screen.getByLabelText('Attack repetitions').textContent).toBe(`0 / ${attack === 'fast' ? 5 : 1}`);
+  if (attack === 'basic') squat();
+  else if (attack === 'strong') pushup();
+  else {
+    for (let n = 0; n < 4; n++) jack();
+    expect(hp('Enemy 1')).toBe(60); jack();
   }
-}, 15000); // Ten full UI encounters under StrictMode also run reliably on slower hosts.
+  expect(hp('Enemy 1')).toBe(attack === 'basic' ? 38 : attack === 'fast' ? 49 : 16);
+  expect(hp('Player')).toBe(100);
+  act(() => vi.advanceTimersByTime(1500));
+  expect(hp('Player')).toBe(96); expect(screen.getByRole('heading', { name: 'ENEMY TURN' })).toBeTruthy();
+  act(() => vi.advanceTimersByTime(3000));
+  expect(phase()).toBe('selecting_attack');
+  act(() => vi.advanceTimersByTime(10000));
+  expect(hp('Player')).toBe(96);
+});
+
+it('shows victory and the existing reward automatically, without a final enemy strike or a click', () => {
+  start(); hold(closedFrame, 3200);
+  hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup();
+  act(() => vi.advanceTimersByTime(4500));
+  expect(hp('Player')).toBe(96);
+  hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup();
+  act(() => vi.advanceTimersByTime(2000));
+  expect(screen.getByRole('heading', { name: 'Victory.' })).toBeTruthy();
+  act(() => vi.advanceTimersByTime(1800));
+  expect(document.querySelector('.result-reward strong')?.textContent).toBe('+50');
+  act(() => vi.advanceTimersByTime(10000));
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it('does not attack during setup and cleans up all battle timers on navigation', () => {
+  start(); act(() => vi.advanceTimersByTime(20000));
+  expect(hp('Player')).toBe(100); expect(hp('Enemy 1')).toBe(60);
+  fireEvent.click(screen.getAllByRole('button', { name: 'Journey' }).at(-1)!);
+  act(() => vi.advanceTimersByTime(1000)); expect(vi.getTimerCount()).toBe(0);
+});
 
 it('navigates every page while retaining game progress and applying camera preferences', () => {
   render(<Dashboard />);

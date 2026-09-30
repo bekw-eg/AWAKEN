@@ -6,11 +6,85 @@ import type { UsePoseDetectionResult } from '../types/pose';
 import { PushUpSequence } from './fixtures/pushUpFrames';
 import { SquatSequence } from './fixtures/squatFrames';
 import { closedFrame, openFrame } from './fixtures/jumpingJackFrames';
+import { BattleOverlay } from '../components/BattleScreen/BattleOverlay';
+import type { BattleOverlayState } from '../game/battleOverlay';
+import type { FormFeedback } from '../exercise-engine/formFeedback';
 
 vi.mock('../hooks/usePoseDetection');
-vi.mock('../components/PoseOverlay/PoseOverlay', () => ({ PoseOverlay: () => null }));
+vi.mock('../components/PoseOverlay/PoseOverlay', () => ({ PoseOverlay: ({ feedback }: { feedback: FormFeedback }) =>
+  <div data-testid="pose-overlay" data-status={feedback.status} data-regions={feedback.regions?.join(',')} /> }));
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => { cleanup(); vi.useRealTimers(); });
+it('renders the stable feedback in both canvas input and debug, logging transitions only', () => {
+  window.history.replaceState(null, '', '/?poseDebug=1');
+  const log = vi.spyOn(console, 'debug').mockImplementation(() => {});
+  const pose: UsePoseDetectionResult = {
+    landmarks: closedFrame.landmarks as UsePoseDetectionResult['landmarks'],
+    worldLandmarks: closedFrame.worldLandmarks as UsePoseDetectionResult['worldLandmarks'],
+    poseTimestampMs: 10, cameraStatus: 'active', engineStatus: 'active', videoSize: { width: 1280, height: 720 },
+    error: null, isLoading: false, isPersonDetected: true,
+  };
+  vi.mocked(usePoseDetection).mockReturnValue(pose);
+  const onPoseFrame = vi.fn(), onExerciseEvent = vi.fn();
+  const element = (feedback: FormFeedback, reliable = true) => <CameraView onExerciseEvent={onExerciseEvent}
+    onPoseFrame={onPoseFrame} formFeedback={feedback} formFeedbackSource="strong:performing_attack" formFeedbackReliable={reliable} />;
+  try {
+    const view = render(element({ status: 'correct' }));
+    expect(screen.getByLabelText('Pose feedback debug').textContent).toContain('Raw status: correct\nStable status: neutral');
+    act(() => vi.advanceTimersByTime(200));
+    expect(screen.getByTestId('pose-overlay').getAttribute('data-status')).toBe('correct');
+    const count = log.mock.calls.length;
+    for (let i = 0; i < 5; i++) {
+      view.rerender(element({ status: 'correct' }));
+      act(() => vi.advanceTimersByTime(50));
+    }
+    expect(log).toHaveBeenCalledTimes(count);
+    view.rerender(element({ status: 'error', regions: ['arms'], message: 'arms' }));
+    act(() => vi.advanceTimersByTime(50));
+    expect(screen.getByTestId('pose-overlay').getAttribute('data-status')).toBe('correct');
+    view.rerender(element({ status: 'correct' }));
+    view.rerender(element({ status: 'neutral' }, false));
+    act(() => vi.advanceTimersByTime(100));
+    expect(screen.getByTestId('pose-overlay').getAttribute('data-status')).toBe('correct');
+    expect(screen.getByLabelText('Pose feedback debug').textContent).toContain('Tracking reliable: false');
+    act(() => vi.advanceTimersByTime(150));
+    expect(screen.getByTestId('pose-overlay').getAttribute('data-status')).toBe('neutral');
+    expect(onPoseFrame).toHaveBeenCalledTimes(1);
+    expect(onExerciseEvent).not.toHaveBeenCalled();
+  } finally {
+    window.history.replaceState(null, '', '/'); log.mockRestore();
+  }
+});
+it('keeps the video and pose feed mounted across announcements and renders unmirrored form hints', () => {
+  const pose: UsePoseDetectionResult = {
+    landmarks: closedFrame.landmarks as UsePoseDetectionResult['landmarks'],
+    worldLandmarks: closedFrame.worldLandmarks as UsePoseDetectionResult['worldLandmarks'],
+    poseTimestampMs: 10, cameraStatus: 'active', engineStatus: 'active', videoSize: { width: 1280, height: 720 },
+    error: null, isLoading: false, isPersonDetected: true,
+  };
+  vi.mocked(usePoseDetection).mockReturnValue(pose);
+  const onPoseFrame = vi.fn(), onExerciseEvent = vi.fn();
+  const element = (announcement: BattleOverlayState | null) => <CameraView onExerciseEvent={onExerciseEvent}
+    onPoseFrame={onPoseFrame} mirrored formFeedbackReliable formFeedback={{ status: 'error', regions: ['arms'], message: 'Выпрями руки' }}>
+    <BattleOverlay announcement={announcement} />
+  </CameraView>;
+  const view = render(element({ type: 'countdown', text: '3' }));
+  const video = screen.getByLabelText('Live webcam');
+  const cameraRef = vi.mocked(usePoseDetection).mock.lastCall![0];
+  for (const text of ['2', '1', 'PUSH-UPS!']) {
+    view.rerender(element({ type: text === 'PUSH-UPS!' ? 'exercise' : 'countdown', text }));
+    expect(screen.getByLabelText('Live webcam')).toBe(video);
+    expect(vi.mocked(usePoseDetection).mock.lastCall).toEqual([cameraRef, true, 0]);
+  }
+  expect(onPoseFrame).toHaveBeenCalledTimes(1);
+  act(() => vi.advanceTimersByTime(250));
+  const hint = screen.getByText('Выпрями руки');
+  expect(hint.closest('.mirrored-feed')).toBeNull();
+  view.rerender(element(null));
+  expect(screen.queryByTestId('battle-overlay')).toBeNull();
+  expect(screen.getByLabelText('Live webcam')).toBe(video);
+  expect(onExerciseEvent).not.toHaveBeenCalled();
+});
 it('emits one push-up game event on real frames and preserves count across modes without replay', () => {
   const pose: UsePoseDetectionResult = {
     landmarks: null, worldLandmarks: null, poseTimestampMs: null, cameraStatus: 'active', engineStatus: 'active',
@@ -93,4 +167,30 @@ it('counts jumping jacks and keeps their counter when switching to other modes',
   fireEvent.click(screen.getByRole('button', { name: 'JUMPING JACK' }));
   expect(document.querySelector('.rep-value .animated-number')?.getAttribute('aria-label')).toBe('1');
   expect(onExerciseEvent).toHaveBeenCalledExactlyOnceWith({ exercise: 'jumping-jack', status: 'correct', timestamp: expect.any(Number) });
+});
+
+it('routes raw camera frames exclusively to battle orchestration, including video aspect and tracking loss', () => {
+  const pose: UsePoseDetectionResult = {
+    landmarks: null, worldLandmarks: null, poseTimestampMs: null, cameraStatus: 'active', engineStatus: 'active',
+    videoSize: { width: 1280, height: 720 }, error: null, isLoading: false, isPersonDetected: true,
+  };
+  const onExerciseEvent = vi.fn(), onPoseFrame = vi.fn();
+  vi.mocked(usePoseDetection).mockReturnValue(pose);
+  const element = () => <CameraView onExerciseEvent={onExerciseEvent} onPoseFrame={onPoseFrame}
+    hideSelector trackingPanel={<p>Hands-free instructions</p>} />;
+  const view = render(element());
+  const sequence = new SquatSequence(); sequence.calibrate(); sequence.rep();
+  for (const frame of sequence.frames) {
+    vi.mocked(usePoseDetection).mockReturnValue({ ...pose,
+      landmarks: frame.landmarks as UsePoseDetectionResult['landmarks'],
+      worldLandmarks: frame.worldLandmarks as UsePoseDetectionResult['worldLandmarks'], poseTimestampMs: frame.timestampMs });
+    view.rerender(element());
+  }
+  expect(onPoseFrame).toHaveBeenLastCalledWith({ ...sequence.frames.at(-1), imageAspectRatio: 1280 / 720 });
+  expect(onExerciseEvent).not.toHaveBeenCalled();
+  expect(screen.getByText('Hands-free instructions')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'SQUAT' })).toBeNull();
+  vi.mocked(usePoseDetection).mockReturnValue({ ...pose, cameraStatus: 'idle' });
+  view.rerender(element());
+  expect(onPoseFrame.mock.lastCall?.[0].landmarks).toBeNull();
 });
