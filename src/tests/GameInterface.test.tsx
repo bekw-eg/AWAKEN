@@ -75,18 +75,24 @@ it.each(['basic', 'fast', 'strong'])('selects %s with the body and sends a singl
   expect(hp('Player')).toBe(96);
 });
 
-it('shows victory and the existing reward automatically, without a final enemy strike or a click', () => {
+it('shows round complete, waits five seconds, and starts exactly one next opponent without a final strike', () => {
   start(); hold(closedFrame, 3200);
   hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup();
   act(() => vi.advanceTimersByTime(4500));
   expect(hp('Player')).toBe(96);
   hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup();
-  act(() => vi.advanceTimersByTime(2000));
-  expect(screen.getByRole('heading', { name: 'Victory.' })).toBeTruthy();
-  act(() => vi.advanceTimersByTime(1800));
-  expect(document.querySelector('.result-reward strong')?.textContent).toBe('+50');
+  expect(hp('Enemy 1')).toBe(0);
+  expect(screen.queryByRole('button', { name: 'CONTINUE →' })).toBeNull();
+  act(() => vi.advanceTimersByTime(600));
+  expect(screen.getByRole('heading', { name: 'ROUND COMPLETE' })).toBeTruthy();
+  expect(screen.getByText('+50 XP')).toBeTruthy();
+  act(() => vi.advanceTimersByTime(4999));
+  expect(hp('Enemy 1')).toBe(0);
+  act(() => vi.advanceTimersByTime(1));
+  expect(hp('Enemy 2')).toBe(70);
+  expect(hp('Player')).toBe(96);
   act(() => vi.advanceTimersByTime(10000));
-  expect(vi.getTimerCount()).toBe(0);
+  expect(hp('Enemy 2')).toBe(70);
 });
 
 it('does not attack during setup and cleans up all battle timers on navigation', () => {
@@ -101,8 +107,8 @@ it('completes all encounters with hands-free attacks and waits for boss death be
   // A trained player can finish each encounter in one strong attack.
   vi.spyOn(progression, 'createGameState').mockImplementation(() => ({ ...initial, player: { ...initial.player, strength: 300 } }));
   render(<StrictMode><Dashboard /></StrictMode>);
+  fireEvent.click(screen.getByRole('button', { name: 'Enter battle' }));
   for (let encounter = 1; encounter <= 10; encounter++) {
-    fireEvent.click(screen.getByRole('button', { name: 'Enter battle' }));
     hold(closedFrame, 3200);
     hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup();
     const boss = encounter === 10;
@@ -113,8 +119,15 @@ it('completes all encounters with hands-free attacks and waits for boss death be
       act(() => vi.advanceTimersByTime(760));
       expect(screen.queryByRole('heading', { name: 'Boss defeated.' })).toBeNull();
       act(() => vi.advanceTimersByTime(BOSS_TIMING.death));
-    } else act(() => vi.advanceTimersByTime(760));
-    expect(screen.getByRole('heading', { name: boss ? 'Boss defeated.' : 'Victory.' })).toBeTruthy();
+    } else {
+      act(() => vi.advanceTimersByTime(600));
+      expect(screen.getByRole('heading', { name: 'ROUND COMPLETE' })).toBeTruthy();
+      expect(screen.getByText('+50 XP')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'CONTINUE →' }));
+      expect(hp(encounter === 9 ? 'BOSS 1' : `Enemy ${encounter + 1}`)).toBeGreaterThan(0);
+      continue;
+    }
+    expect(screen.getByRole('heading', { name: 'Boss defeated.' })).toBeTruthy();
     act(() => vi.advanceTimersByTime(2000));
     expect(document.querySelector('.result-reward strong')?.textContent).toBe(boss ? '+200' : '+50');
     act(() => vi.advanceTimersByTime(500)); // Finish the newly leveled progress track and focus task.
@@ -124,6 +137,55 @@ it('completes all encounters with hands-free attacks and waits for boss death be
       .toContain(boss ? 'Enemy 1' : encounter === 9 ? 'BOSS 1' : `Enemy ${encounter + 1}`);
   }
 }, 20000);
+
+it('recovers through the camera, pauses invalid form, and gives the boss its standard attack', () => {
+  const initial = progression.createGameState();
+  vi.spyOn(progression, 'createGameState').mockImplementation(() => ({ ...initial, currentEnemyIndex: 10,
+    player: { ...initial.player, hp: 24 } }));
+  start(); hold(squatFrame(0), 3300);
+  fireEvent.click(screen.getByRole('button', { name: 'Recover' }));
+  expect(screen.getByRole('heading', { name: 'RECOVERY MODE' })).toBeTruthy();
+  hold(squatFrame(0), 2050);
+  expect(screen.getByText('RECOVERY 2.0 / 5.0 SEC')).toBeTruthy();
+  hold(squatFrame(0, { knee: 100 }), 1500);
+  expect(screen.getByText('RECOVERY 2.0 / 5.0 SEC')).toBeTruthy();
+  expect(hp('Player')).toBe(24); expect(hp('BOSS 1')).toBe(600);
+  hold(squatFrame(0), 3050);
+  expect(hp('Player')).toBe(54);
+  expect(screen.getByRole('heading', { name: 'RECOVERY COMPLETE' })).toBeTruthy();
+  expect(screen.getByTestId('battle-overlay').textContent).toContain('+30 HP');
+  act(() => vi.advanceTimersByTime(1500));
+  expect(hp('Player')).toBe(11);
+  expect(hp('BOSS 1')).toBe(600);
+  act(() => vi.advanceTimersByTime(2700));
+  expect((screen.getByRole('button', { name: 'Recover' }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByText('Cooldown: 3')).toBeTruthy();
+  expect(screen.getByText('1 USE LEFT')).toBeTruthy();
+});
+
+it('enables the last recovery after three player turns, then shows depleted', () => {
+  const initial = progression.createGameState();
+  vi.spyOn(progression, 'createGameState').mockImplementation(() => ({ ...initial, currentEnemyIndex: 10,
+    player: { ...initial.player, hp: 88, defense: 100 } }));
+  start(); hold(squatFrame(0), 3300);
+  fireEvent.click(screen.getByRole('button', { name: 'Recover' }));
+  hold(squatFrame(0), 5050);
+  expect(hp('Player')).toBe(100);
+  expect(screen.getByTestId('battle-overlay').textContent).toContain('+12 HP');
+  act(() => vi.advanceTimersByTime(4200));
+  for (const remaining of [3, 2, 1]) {
+    expect(screen.getByText(`Cooldown: ${remaining}`)).toBeTruthy();
+    hold(pushUpFrame(0), 800); prepare(pushUpFrame(0)); pushup();
+    act(() => vi.advanceTimersByTime(4200));
+  }
+  expect((screen.getByRole('button', { name: 'Recover' }) as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(screen.getByRole('button', { name: 'Recover' }));
+  hold(squatFrame(0), 5050);
+  act(() => vi.advanceTimersByTime(4200));
+  expect(screen.getByText('DEPLETED')).toBeTruthy();
+  expect(screen.getByText('0 USES LEFT')).toBeTruthy();
+  expect((screen.getByRole('button', { name: 'Recover' }) as HTMLButtonElement).disabled).toBe(true);
+});
 
 it('navigates every page while retaining game progress and applying camera preferences', () => {
   render(<Dashboard />);

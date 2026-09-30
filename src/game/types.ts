@@ -44,6 +44,8 @@ export type Enemy = {
 };
 
 export type GameState = {
+  roundPhase: 'active' | 'enemy_defeated' | 'round_transition';
+  recoveryUses: number;
   screen: 'main' | 'workout' | 'battle';
   player: PlayerState;
   exercises: Record<ExerciseType, ExerciseProgress>;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HandsFreeBattleController, type BattleCommand } from '../game/handsFreeBattleController';
-import { HANDS_FREE_CONFIG as C } from '../game/handsFreeConfig';
+import { BOSS_RECOVERY, HANDS_FREE_CONFIG as C } from '../game/handsFreeConfig';
 import { isPushupReadyPose, isStandingPose, standingPoseFeedback } from '../game/handsFreePoses';
 import type { PushUpFrame } from '../exercise-engine/pushUpTypes';
 import { SquatSequence, squatFrame } from './fixtures/squatFrames';
@@ -10,7 +10,8 @@ import { battleOverlay } from '../game/battleOverlay';
 
 type Pose = Omit<PushUpFrame, 'timestampMs'>;
 export class BattleSequence {
-  controller = new HandsFreeBattleController();
+  controller: HandsFreeBattleController;
+  constructor(isBoss = false) { this.controller = new HandsFreeBattleController(isBoss); }
   now = 0;
   commands: BattleCommand[] = [];
   health = { playerHp: 100, enemyHp: 1000 };
@@ -32,6 +33,83 @@ export class BattleSequence {
   pushup(bottom = 85) { const s = new PushUpSequence(); s.rep(bottom); s.frames.forEach(f => this.frame(f)); }
   get attacks() { return this.commands.filter(c => c.type === 'attack'); }
 }
+
+describe('boss recovery turns', () => {
+  it('requires a live boss player turn and cancels selection movement', () => {
+    const normal = new BattleSequence(); normal.start();
+    expect(normal.controller.startRecovery(normal.now)).toBe(false);
+    const s = new BattleSequence(true);
+    expect(s.controller.startRecovery(s.now)).toBe(false);
+    s.start(); s.hold(pushUpFrame(0), 300);
+    expect(s.controller.startRecovery(s.now)).toBe(true);
+    expect(s.state.selectedAttack).toBeNull();
+    expect(s.state.pushupHoldMs).toBe(0);
+    expect(s.controller.startRecovery(s.now)).toBe(false);
+    s.squat(); s.jack(); s.pushup();
+    expect(s.attacks).toHaveLength(0);
+    expect(s.state.phase).toBe('recovering');
+  });
+
+  it('pauses for bad form, missing, duplicate and stale frames; heals once after five observed seconds', () => {
+    const s = new BattleSequence(true); s.start(); s.controller.startRecovery(s.now);
+    s.hold(squatFrame(0), 2050);
+    const held = s.state.recoveryHoldMs;
+    expect(held).toBe(2000);
+    s.hold(squatFrame(0, { knee: 100 }), 2000);
+    s.hold({ landmarks: null, worldLandmarks: null }, 2000);
+    expect(s.state.recoveryHoldMs).toBe(held);
+    s.frame(squatFrame(0));
+    const duplicate = { ...squatFrame(0), timestampMs: s.now };
+    s.now += 2000; s.commands.push(...s.controller.advance(s.now, s.health, duplicate));
+    expect(s.state.recoveryHoldMs).toBe(held);
+    s.now += 2000; s.commands.push(...s.controller.advance(s.now, s.health));
+    expect(s.state.recoveryHoldMs).toBe(held);
+    expect(s.commands).toEqual([]);
+    s.hold(squatFrame(0), 3000);
+    expect(s.commands).toEqual([]);
+    s.frame(squatFrame(0));
+    expect(s.commands).toEqual([{ type: 'recover', useNumber: 1 }]);
+    expect(s.state.phase).toBe('resolving_recovery');
+    expect(s.state.recoveryCooldown).toBe(3);
+    s.hold(squatFrame(0), C.resolveMs);
+    expect(s.commands).toEqual([{ type: 'recover', useNumber: 1 }, { type: 'enemy_attack' }]);
+    s.hold(squatFrame(0), C.enemyTurnMs + C.betweenTurnsMs);
+    expect(s.state.phase).toBe('selecting_attack');
+    expect(s.state.recoveryCooldown).toBe(3);
+  });
+
+  it('waits three completed attacking turns before the last use and then stays depleted', () => {
+    const s = new BattleSequence(true); s.start(); s.controller.startRecovery(s.now);
+    s.hold(squatFrame(0), BOSS_RECOVERY.holdDurationMs + 50);
+    s.hold(squatFrame(0), C.resolveMs + C.enemyTurnMs + C.betweenTurnsMs);
+    expect(s.state.recoveryUsesLeft).toBe(1);
+    for (const remaining of [3, 2, 1]) {
+      expect(s.state.recoveryCooldown).toBe(remaining);
+      expect(s.controller.startRecovery(s.now)).toBe(false);
+      s.commands = [];
+      s.hold(pushUpFrame(0), 800); s.prepare(pushUpFrame(0)); s.pushup();
+      s.hold(squatFrame(0), C.resolveMs + C.enemyTurnMs + C.betweenTurnsMs);
+      expect(s.state.phase).toBe('selecting_attack');
+    }
+    expect(s.state.recoveryAvailable).toBe(true);
+    expect(s.controller.startRecovery(s.now)).toBe(true);
+    s.commands = [];
+    s.hold(squatFrame(0), BOSS_RECOVERY.holdDurationMs + 50);
+    expect(s.commands).toEqual([{ type: 'recover', useNumber: 2 }]);
+    s.hold(squatFrame(0), C.resolveMs + C.enemyTurnMs + C.betweenTurnsMs);
+    expect(s.state.recoveryUsesLeft).toBe(0);
+    expect(s.state.recoveryAvailable).toBe(false);
+    expect(s.controller.startRecovery(s.now)).toBe(false);
+  });
+
+  it.each(['playerHp', 'enemyHp'] as const)('stops a pending recovery when %s reaches zero', key => {
+    const s = new BattleSequence(true); s.start(); s.controller.startRecovery(s.now);
+    s.hold(squatFrame(0), 4000); s.health[key] = 0;
+    s.hold(squatFrame(0), 6000);
+    expect(s.commands).toEqual([]);
+    expect(s.state.phase).toBe(key === 'playerHp' ? 'defeat' : 'victory');
+  });
+});
 
 describe('hands-free orchestration using the real exercise detectors', () => {
   it('announces 3, 2, 1, FIGHT before enabling gesture selection', () => {

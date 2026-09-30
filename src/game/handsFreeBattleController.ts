@@ -3,16 +3,17 @@ import { JumpingJackDetector } from '../exercise-engine/jumpingJackDetector';
 import { PushUpDetector } from '../exercise-engine/pushUpDetector';
 import type { PushUpFrame } from '../exercise-engine/pushUpTypes';
 import type { ExerciseEvent } from './types';
-import { HANDS_FREE_ATTACKS, HANDS_FREE_CONFIG as C, type AttackType } from './handsFreeConfig';
+import { BOSS_RECOVERY, HANDS_FREE_ATTACKS, HANDS_FREE_CONFIG as C, type AttackType } from './handsFreeConfig';
 import { isClosedPose, isPushupReadyPose, isStandingPose, standingPoseFeedback, pushupReadyState, readyPoseTrackingReliable } from './handsFreePoses';
 import { FORM_DISPLAY_CONFIG, type FormFeedback } from '../exercise-engine/formFeedback';
 import { resolvePoseFeedback } from './resolvePoseFeedback';
 
 export type BattlePhase = 'camera_setup' | 'battle_intro' | 'battle_fight' | 'selecting_attack' | 'attack_confirmed' |
   'waiting_for_neutral' | 'exercise_prepare' | 'exercise_announcement' | 'performing_attack' | 'resolving_attack' |
-  'enemy_turn' | 'turn_prepare' | 'victory' | 'defeat';
-export type BattleCommand = { type: 'attack'; event: ExerciseEvent } | { type: 'enemy_attack' };
+  'recovering' | 'resolving_recovery' | 'enemy_turn' | 'turn_prepare' | 'victory' | 'defeat';
+export type BattleCommand = { type: 'attack'; event: ExerciseEvent } | { type: 'enemy_attack' } | { type: 'recover'; useNumber: number };
 export type BattleSnapshot = {
+  recoveryAvailable: boolean; recoveryUsesLeft: number; recoveryCooldown: number; recoveryHoldMs: number; recoveryHealedHp: number;
   phase: BattlePhase; selectedAttack: AttackType | null; candidate: AttackType | null;
   selectionLocked: boolean; reps: number; countdown: number; pushupHoldMs: number;
   squatPhase: string; jumpingJackPhase: string; feedback: string | null; formError: boolean;
@@ -26,6 +27,20 @@ export type BattleSnapshot = {
  * Commands are returned once, on phase transitions, never from renders or repeated timers.
  */
 export class HandsFreeBattleController {
+  constructor(private readonly isBoss = false) {}
+  private recoveryUses = 0;
+  private recoveryCooldown = 0;
+  private recoveryHoldMs = 0;
+  private recoveryLastAt: number | null = null;
+  private recoveryHealedHp = 0;
+
+  startRecovery(now: number): boolean {
+    if (!this.isBoss || this.phase !== 'selecting_attack' || this.recoveryCooldown > 0 || this.recoveryUses >= BOSS_RECOVERY.maxUsesPerFight) return false;
+    this.selected = null; this.candidate = null; this.resetDetectors();
+    this.recoveryHoldMs = 0; this.recoveryLastAt = null;
+    this.enter('recovering', now);
+    return true;
+  }
   private squat = new SquatDetector();
   private jack = new JumpingJackDetector();
   private pushup = new PushUpDetector();
@@ -62,6 +77,9 @@ export class HandsFreeBattleController {
       candidate: this.visualCandidate, ready: this.visualReady, squatResult: this.squat.getResult(),
       jumpingJackResult: this.jack.getResult(), pushupResult: this.pushup.getResult() });
     return { phase: this.phase, selectedAttack: this.selected, candidate: this.candidate,
+      recoveryAvailable: this.isBoss && this.phase === 'selecting_attack' && this.recoveryCooldown === 0 && this.recoveryUses < BOSS_RECOVERY.maxUsesPerFight,
+      recoveryUsesLeft: BOSS_RECOVERY.maxUsesPerFight - this.recoveryUses, recoveryCooldown: this.recoveryCooldown,
+      recoveryHoldMs: this.recoveryHoldMs, recoveryHealedHp: this.recoveryHealedHp,
       selectionLocked: this.phase !== 'selecting_attack', reps: this.reps,
       countdown: duration ? Math.max(0, Math.ceil((duration - (now - this.enteredAt)) / C.countdownStepMs)) : 0,
       pushupHoldMs: this.pushupHoldMs, squatPhase: this.squat.getResult().phase,
@@ -72,12 +90,12 @@ export class HandsFreeBattleController {
       pushupReadyVisual: this.pushupReadyVisual,
       visualCandidate: this.phase === 'selecting_attack' ? this.visualCandidate : null,
       candidateDurationMs: this.phase === 'selecting_attack' && this.visualCandidate ? now - this.candidateSince : 0,
-      activeDetector: this.phase === 'selecting_attack' ? 'selection' : this.selected && this.phase === 'performing_attack' ?
+      activeDetector: this.phase === 'recovering' ? 'standing-recovery' : this.phase === 'selecting_attack' ? 'selection' : this.selected && this.phase === 'performing_attack' ?
         HANDS_FREE_ATTACKS[this.selected].exercise : this.selected && ['waiting_for_neutral', 'exercise_prepare', 'exercise_announcement'].includes(this.phase) ?
           `${HANDS_FREE_ATTACKS[this.selected].exercise}-ready` : 'none' };
   }
 
-  advance(now: number, health: { playerHp: number; enemyHp: number }, frame?: PushUpFrame): BattleCommand[] {
+  advance(now: number, health: { playerHp: number; enemyHp: number; playerMaxHp?: number }, frame?: PushUpFrame): BattleCommand[] {
     if (this.phase === 'victory' || this.phase === 'defeat') return [];
     if (health.enemyHp <= 0) { this.enter('victory', now); return []; }
     if (health.playerHp <= 0) { this.enter('defeat', now); return []; }
@@ -165,6 +183,30 @@ export class HandsFreeBattleController {
           }
         }
         break;
+      case 'recovering':
+        if (fresh) {
+          const ready = this.tracking && isStandingPose(frame);
+          this.visualReady = ready;
+          this.feedbackReliable = readyPoseTrackingReliable(frame, 'basic');
+          this.feedback = standingPoseFeedback(frame) ?? 'Hold steady · recovery in progress';
+          // Only consecutive, fresh valid observations contribute time. Bad form
+          // pauses the hold; missing/stale frames never count toward healing.
+          if (ready) {
+            if (this.recoveryLastAt !== null) this.recoveryHoldMs += Math.max(0, now - this.recoveryLastAt);
+            this.recoveryLastAt = now;
+          } else this.recoveryLastAt = null;
+          this.recoveryHoldMs = Math.min(BOSS_RECOVERY.holdDurationMs, this.recoveryHoldMs);
+          if (this.recoveryHoldMs >= BOSS_RECOVERY.holdDurationMs) {
+            this.recoveryUses++;
+            this.recoveryCooldown = BOSS_RECOVERY.cooldownTurns;
+            const maxHp = health.playerMaxHp ?? 100;
+            this.recoveryHealedHp = Math.min(maxHp - health.playerHp, Math.round(maxHp * BOSS_RECOVERY.healPercent));
+            this.enter('resolving_recovery', now);
+            return [{ type: 'recover', useNumber: this.recoveryUses }];
+          }
+        }
+        break;
+      case 'resolving_recovery':
       case 'resolving_attack':
         if (elapsed >= C.resolveMs) { this.enter('enemy_turn', now); return [{ type: 'enemy_attack' }]; }
         break;
@@ -240,6 +282,8 @@ export class HandsFreeBattleController {
     this.enter('attack_confirmed', now);
   }
   private enter(phase: BattlePhase, now: number) {
+    // Count completed attacking turns; the recovery turn itself starts at 3.
+    if (phase === 'resolving_attack' && this.recoveryCooldown > 0) this.recoveryCooldown--;
     this.phase = phase; this.enteredAt = now;
     this.feedback = null; this.formError = false;
     this.visualReady = false;
@@ -255,6 +299,7 @@ export class HandsFreeBattleController {
   private clearPushupHold() { this.pushupHoldAt = null; this.pushupAnchor = null; this.pushupHoldMs = 0; }
   private resetDetectors() { this.squat.reset(); this.jack.reset(); this.pushup.reset(); this.clearPushupHold(); }
   private loseTracking(now: number) {
+    this.recoveryLastAt = null;
     if (this.phase === 'exercise_prepare' || this.phase === 'exercise_announcement') this.enter('waiting_for_neutral', now);
     if (this.phase === 'battle_intro' || this.phase === 'battle_fight') this.enter('camera_setup', now);
     this.tracking = false; this.candidate = null; this.clearPushupHold();

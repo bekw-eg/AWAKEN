@@ -117,3 +117,24 @@
 .hands-free-debug { white-space: pre-wrap; font-size: 10px; line-height: 1.5; color: var(--text-secondary); }
 .neutral-readiness { display: grid; gap: 8px; margin: 20px 0; color: var(--text-secondary); font-size: 11px; }
 .neutral-readiness progress { width: 100%; height: 8px; accent-color: var(--accent); }
+
+.round-transition { max-width: 580px; margin: 24px auto; padding: 24px; border: 1px solid var(--accent); border-radius: var(--radius-md); background: var(--surface); text-align: center; }
+.round-transition h2 { margin: 10px 0; }
+.round-transition p { color: var(--text-secondary); }
+.round-continue { position: relative; isolation: isolate; overflow: hidden; display: flex; justify-content: space-between; gap: 24px; width: 100%; padding: 18px 24px; margin-top: 20px; border: 1px solid var(--accent); border-radius: var(--radius-md); background: var(--surface); color: var(--text-primary); font-weight: 600; }
+.round-continue > span:not(.round-countdown-fill) { position: relative; z-index: 1; }
+.round-countdown-fill { position: absolute; inset: 0; background: var(--accent-soft); transform-origin: left center; animation: round-drain 5s linear forwards; }
+.round-continue:focus-visible, .recovery-choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+[data-round-phase="enemy_defeated"] .fighter-enemy { animation: round-enemy-death 600ms ease-out forwards; }
+[data-round-phase="round_transition"] .fighter-enemy { opacity: .25; }
+.recovery-choice { text-align: left; border-color: var(--success); background: color-mix(in srgb, var(--success) 8%, var(--surface)); }
+.recovery-choice strong, .recovery-progress strong { color: var(--success); }
+.recovery-choice:disabled { opacity: .5; cursor: not-allowed; }
+.recovery-progress { display: grid; gap: 12px; margin: 20px 0; font-variant-numeric: tabular-nums; }
+.recovery-progress progress { width: 100%; accent-color: var(--success); }
+[data-phase="resolving_recovery"] { animation: recovery-complete 1500ms ease-out; }
+@keyframes round-drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes round-enemy-death { 0% { opacity: 1; } 30% { opacity: .8; filter: brightness(1.5); } 100% { opacity: .25; transform: translateY(6px) scale(.98); } }
+@keyframes recovery-complete { from { background: color-mix(in srgb, var(--success) 22%, transparent); } to { background: transparent; } }
+.reduce-motion .round-countdown-fill { display: none; }
+@media (prefers-reduced-motion: reduce) { .round-countdown-fill { display: none; } }

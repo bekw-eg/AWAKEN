@@ -1,6 +1,14 @@
 import type { ExerciseType } from './types';
 import { DEFAULT_SQUAT_CONFIG } from '../exercise-engine/squatDetector';
 
+export const ROUND_TRANSITION = { deathDurationMs: 600, countdownMs: 5000 } as const;
+export const BOSS_RECOVERY = {
+  healPercent: 0.30,
+  holdDurationMs: 5000,
+  cooldownTurns: 3,
+  maxUsesPerFight: 2,
+} as const;
+
 export const HANDS_FREE_CONFIG = {
   selectionLockMs: 1000,
   squatSelectionCooldownMs: 1200,
