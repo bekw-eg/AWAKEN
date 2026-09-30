@@ -46,16 +46,9 @@ export function CameraView({ onExerciseEvent, children, forcedExerciseType, onEx
   const active = cameraStatus === 'active' && engineStatus === 'active';
   const squat = useSquatExercise(landmarks, worldLandmarks, poseTimestampMs, active && exerciseType === 'squat');
   const jumpingJack = useJumpingJackExercise(landmarks, worldLandmarks, poseTimestampMs, active && exerciseType === 'jumping-jack');
-  const pushUp = usePushUpExercise(landmarks, worldLandmarks, poseTimestampMs, active && exerciseType === 'push-up');
-  const confirmRep = useCallback((event: ExerciseEvent) => {
-    if (suspended) return;
-    emitMotionEvent({ type: 'rep-success', exercise: event.exercise, amount: 1 });
-    onExerciseEvent(event);
-  }, [onExerciseEvent, suspended]);
-  useSquatGameEvents(squat.repCount, squat.repJustCounted, confirmRep);
-  useSquatGameEvents(jumpingJack.repCount, jumpingJack.repJustCounted, confirmRep, 'jumping-jack');
-  useSquatGameEvents(pushUp.repCount, pushUp.repJustCounted, confirmRep, 'push-up');
-  const result = exerciseType === 'squat' ? squat : exerciseType === 'jumping-jack' ? jumpingJack : pushUp;
+  const pushUp = usePushUpExercise(landmarks, worldLandmarks, poseTimestampMs, active && exerciseType === 'push-up',
+    undefined, videoSize.width / videoSize.height);
+  useSquatGameEvents(squat.repCount, squat.repJustCounted, onExerciseEvent);
   const stopped = cameraStatus === 'idle' && engineStatus === 'idle' && !error;
   const heading = error ? (error.startsWith('CAMERA ACCESS REQUIRED') ? 'CAMERA ACCESS REQUIRED' : 'CAMERA INTERRUPTED')
     : engineStatus === 'loading' ? 'LOADING POSE MODEL'

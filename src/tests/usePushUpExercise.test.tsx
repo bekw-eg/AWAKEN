@@ -9,7 +9,7 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 function mount() {
   return renderHook(({ frame, enabled }: { frame: PushUpFrame | null; enabled: boolean }) =>
-    usePushUpExercise(frame?.landmarks ?? null, frame?.worldLandmarks ?? null, frame?.timestampMs ?? null, enabled, {}),
+    usePushUpExercise(frame?.landmarks ?? null, frame?.worldLandmarks ?? null, frame?.timestampMs ?? null, enabled, {}, frame?.imageAspectRatio),
   { initialProps: { frame: null as PushUpFrame | null, enabled: true },
     wrapper: ({ children }: { children: ReactNode }) => <StrictMode>{children}</StrictMode> });
 }
@@ -28,6 +28,7 @@ describe('usePushUpExercise', () => {
       if (hook.result.current.repJustCounted) events++;
     }
     expect(events).toBe(2); expect(hook.result.current.repCount).toBe(2);
+    expect(hook.result.current.metrics.elbowAngle).toBeCloseTo(s.result.metrics.elbowAngle!, 5);
     hook.rerender({ frame: { ...s.frames.at(-1)!, landmarks: [...s.frames.at(-1)!.landmarks!] }, enabled: true });
     expect(hook.result.current.repJustCounted).toBe(false);
     act(() => hook.result.current.reset()); expect(hook.result.current.repCount).toBe(0);
