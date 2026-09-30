@@ -94,3 +94,29 @@ it('counts jumping jacks and keeps their counter when switching to other modes',
   expect(document.querySelector('.rep-value .animated-number')?.getAttribute('aria-label')).toBe('1');
   expect(onExerciseEvent).toHaveBeenCalledExactlyOnceWith({ exercise: 'jumping-jack', status: 'correct', timestamp: expect.any(Number) });
 });
+
+it('routes raw camera frames exclusively to battle orchestration, including video aspect and tracking loss', () => {
+  const pose: UsePoseDetectionResult = {
+    landmarks: null, worldLandmarks: null, poseTimestampMs: null, cameraStatus: 'active', engineStatus: 'active',
+    videoSize: { width: 1280, height: 720 }, error: null, isLoading: false, isPersonDetected: true,
+  };
+  const onExerciseEvent = vi.fn(), onPoseFrame = vi.fn();
+  vi.mocked(usePoseDetection).mockReturnValue(pose);
+  const element = () => <CameraView onExerciseEvent={onExerciseEvent} onPoseFrame={onPoseFrame}
+    hideSelector trackingPanel={<p>Hands-free instructions</p>} />;
+  const view = render(element());
+  const sequence = new SquatSequence(); sequence.calibrate(); sequence.rep();
+  for (const frame of sequence.frames) {
+    vi.mocked(usePoseDetection).mockReturnValue({ ...pose,
+      landmarks: frame.landmarks as UsePoseDetectionResult['landmarks'],
+      worldLandmarks: frame.worldLandmarks as UsePoseDetectionResult['worldLandmarks'], poseTimestampMs: frame.timestampMs });
+    view.rerender(element());
+  }
+  expect(onPoseFrame).toHaveBeenLastCalledWith({ ...sequence.frames.at(-1), imageAspectRatio: 1280 / 720 });
+  expect(onExerciseEvent).not.toHaveBeenCalled();
+  expect(screen.getByText('Hands-free instructions')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'SQUAT' })).toBeNull();
+  vi.mocked(usePoseDetection).mockReturnValue({ ...pose, cameraStatus: 'idle' });
+  view.rerender(element());
+  expect(onPoseFrame.mock.lastCall?.[0].landmarks).toBeNull();
+});

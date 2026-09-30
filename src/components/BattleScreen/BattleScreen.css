@@ -97,3 +97,21 @@
   .battle-result { margin: 24px auto; padding: 32px 20px; }
   .battle-result h1 { font-size: 32px; }
 }
+
+/* Gesture instructions occupy the feedback panel next to the live camera. */
+.hands-free-status { padding: 22px; }
+.hands-free-status h2 { font-size: clamp(20px, 2vw, 30px); margin: 12px 0; line-height: 1.2; }
+.hands-free-status p { color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.hands-free-countdown { display: block; color: var(--accent); font-size: 64px; font-variant-numeric: tabular-nums; text-align: center; margin: 20px 0; }
+.gesture-choices { display: grid; gap: 10px; margin-top: 20px; }
+.gesture-choice { display: grid; gap: 6px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.gesture-choice.detecting { border-color: var(--accent); background: var(--accent-soft); }
+.gesture-choice strong { font-size: 14px; color: var(--text-primary); }
+.gesture-choice span { font-size: 12px; color: var(--text-secondary); }
+.gesture-choice small { font-size: 10px; color: var(--text-muted); }
+.gesture-choice.detecting small { color: var(--accent); }
+.gesture-choice progress { width: 100%; height: 6px; accent-color: var(--accent); }
+.hands-free-hint { min-height: 38px; margin-top: 16px; }
+.hands-free-status .form-error { color: var(--danger); }
+.hands-free-status .hands-free-camera-tip { font-size: 10px; color: var(--text-muted); border-top: 1px solid var(--border); padding-top: 14px; }
+.hands-free-debug { white-space: pre-wrap; font-size: 10px; line-height: 1.5; color: var(--text-secondary); }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ExerciseEvent, ExerciseType } from '../../game/types';
+import type { PushUpFrame } from '../../exercise-engine/pushUpTypes';
 import { useSquatGameEvents } from '../../hooks/useSquatGameEvents';
 import { usePoseDetection } from '../../hooks/usePoseDetection';
 import { useSquatExercise } from '../../hooks/useSquatExercise';
@@ -31,9 +32,11 @@ type Props = {
   autoStart?: boolean;
   mirrored?: boolean;
   suspended?: boolean;
+  onPoseFrame?: (frame: PushUpFrame) => void;
+  trackingPanel?: ReactNode;
 };
 
-export function CameraView({ onExerciseEvent, children, forcedExerciseType, onExerciseChange, hideSelector, autoStart = true, mirrored = true, suspended = false }: Props) {
+export function CameraView({ onExerciseEvent, children, forcedExerciseType, onExerciseChange, hideSelector, autoStart = true, mirrored = true, suspended = false, onPoseFrame, trackingPanel }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [enabled, setEnabled] = useState(autoStart);
   const [restartKey, setRestartKey] = useState(0);
@@ -44,15 +47,22 @@ export function CameraView({ onExerciseEvent, children, forcedExerciseType, onEx
     usePoseDetection(videoRef, enabled && !suspended, restartKey);
 
   const active = cameraStatus === 'active' && engineStatus === 'active';
-  const squat = useSquatExercise(landmarks, worldLandmarks, poseTimestampMs, active && exerciseType === 'squat');
-  const jumpingJack = useJumpingJackExercise(landmarks, worldLandmarks, poseTimestampMs, active && exerciseType === 'jumping-jack');
-  const pushUp = usePushUpExercise(landmarks, worldLandmarks, poseTimestampMs, active && exerciseType === 'push-up',
+  // In battle the orchestration layer exclusively owns detectors and rep events.
+  const training = active && !onPoseFrame;
+  useEffect(() => {
+    if (!onPoseFrame || suspended) return;
+    onPoseFrame({ landmarks: active ? landmarks : null, worldLandmarks: active ? worldLandmarks : null,
+      timestampMs: poseTimestampMs ?? performance.now(), imageAspectRatio: videoSize.width / videoSize.height });
+  }, [onPoseFrame, suspended, active, landmarks, worldLandmarks, poseTimestampMs, videoSize.width, videoSize.height]);
+  const squat = useSquatExercise(landmarks, worldLandmarks, poseTimestampMs, training && exerciseType === 'squat');
+  const jumpingJack = useJumpingJackExercise(landmarks, worldLandmarks, poseTimestampMs, training && exerciseType === 'jumping-jack');
+  const pushUp = usePushUpExercise(landmarks, worldLandmarks, poseTimestampMs, training && exerciseType === 'push-up',
     undefined, videoSize.width / videoSize.height);
   const confirmRep = useCallback((event: ExerciseEvent) => {
-    if (suspended) return;
+    if (suspended || onPoseFrame) return;
     emitMotionEvent({ type: 'rep-success', exercise: event.exercise, amount: 1 });
     onExerciseEvent(event);
-  }, [onExerciseEvent, suspended]);
+  }, [onExerciseEvent, suspended, onPoseFrame]);
   useSquatGameEvents(squat.repCount, squat.repJustCounted, confirmRep);
   useSquatGameEvents(jumpingJack.repCount, jumpingJack.repJustCounted, confirmRep, 'jumping-jack');
   useSquatGameEvents(pushUp.repCount, pushUp.repJustCounted, confirmRep, 'push-up');
@@ -115,12 +125,12 @@ export function CameraView({ onExerciseEvent, children, forcedExerciseType, onEx
       </div>
       <aside className="tracking-panel" aria-label="Live exercise feedback">
         <div className="tracking-heading"><span className="eyebrow">MOVEMENT TRACKING</span><Icon name="Activity" /></div>
-        {exerciseType === 'squat' ? <ExerciseFeedback result={squat} onReset={squat.reset} />
+        {trackingPanel ?? (exerciseType === 'squat' ? <ExerciseFeedback result={squat} onReset={squat.reset} />
           : exerciseType === 'jumping-jack' ? <JumpingJackFeedback result={jumpingJack} onReset={jumpingJack.reset} />
-          : <PushUpFeedback result={pushUp} onReset={pushUp.reset} />}
+          : <PushUpFeedback result={pushUp} onReset={pushUp.reset} />)}
       </aside>
     </div>
     {typeof children === 'function' ? children(telemetry) : children}
-    <aside className="setup-note"><Icon name="Maximize" /><p><strong>{exerciseType === 'push-up' ? 'Position your camera to the side.' : 'Keep your full body in view.'}</strong> {exerciseType === 'push-up' ? 'Show wrists and ankles. Hold a straight plank to calibrate.' : 'Face the camera, stand upright for one second, and use good lighting.'}</p></aside>
+    {!onPoseFrame && <aside className="setup-note"><Icon name="Maximize" /><p><strong>{exerciseType === 'push-up' ? 'Position your camera to the side.' : 'Keep your full body in view.'}</strong> {exerciseType === 'push-up' ? 'Show wrists and ankles. Hold a straight plank to calibrate.' : 'Face the camera, stand upright for one second, and use good lighting.'}</p></aside>}
   </section>;
 }
