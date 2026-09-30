@@ -6,6 +6,7 @@ import type { PushUpFrame } from '../exercise-engine/pushUpTypes';
 import { SquatSequence, squatFrame } from './fixtures/squatFrames';
 import { PushUpSequence, pushUpFrame } from './fixtures/pushUpFrames';
 import { closedFrame, openFrame, lowArmsFrame, narrowLegsFrame, invisibleFrame } from './fixtures/jumpingJackFrames';
+import { battleOverlay } from '../game/battleOverlay';
 
 type Pose = Omit<PushUpFrame, 'timestampMs'>;
 export class BattleSequence {
@@ -19,7 +20,7 @@ export class BattleSequence {
     this.commands.push(...this.controller.advance(this.now, this.health, { ...pose, timestampMs: this.now }));
   }
   hold(pose: Pose, ms: number) { for (let t = 0; t < ms; t += 50) this.frame(pose); }
-  start(pose: Pose = closedFrame) { this.hold(pose, C.introCountdownMs + 100); expect(this.state.phase).toBe('selecting_attack'); }
+  start(pose: Pose = closedFrame) { this.hold(pose, C.introCountdownMs + C.fightAnnouncementMs + 100); expect(this.state.phase).toBe('selecting_attack'); }
   prepare(pose: Pose) {
     for (let n = 0; n < 150 && this.state.phase !== 'performing_attack'; n++) this.frame(pose);
     expect(this.state.phase).toBe('performing_attack');
@@ -33,6 +34,47 @@ export class BattleSequence {
 }
 
 describe('hands-free orchestration using the real exercise detectors', () => {
+  it('announces 3, 2, 1, FIGHT before enabling gesture selection', () => {
+    const s = new BattleSequence(); s.frame(closedFrame);
+    expect(battleOverlay(s.state)?.text).toBe('3');
+    s.hold(closedFrame, C.countdownStepMs); expect(battleOverlay(s.state)?.text).toBe('2');
+    s.hold(closedFrame, C.countdownStepMs); expect(battleOverlay(s.state)?.text).toBe('1');
+    s.hold(closedFrame, C.countdownStepMs); expect(battleOverlay(s.state)?.text).toBe('FIGHT!');
+    s.hold(openFrame, C.fightAnnouncementMs - 50); expect(s.state.selectedAttack).toBeNull();
+    s.frame(closedFrame); expect(s.state.phase).toBe('selecting_attack'); expect(battleOverlay(s.state)).toBeNull();
+  });
+
+  it.each(['basic', 'fast', 'strong'] as const)('blocks reps until the %s exercise title disappears', attack => {
+    const s = new BattleSequence(); s.start(squatFrame(0)); s.hold(squatFrame(0), 1600);
+    if (attack === 'basic') s.squat(); else if (attack === 'fast') s.jack(); else s.hold(pushUpFrame(0), 800);
+    expect(battleOverlay(s.state)?.type).toBe('attack_selected');
+    const neutral = attack === 'basic' ? squatFrame(0) : attack === 'fast' ? closedFrame : pushUpFrame(0);
+    for (let n = 0; n < 150 && s.state.phase !== 'exercise_announcement'; n++) s.frame(neutral);
+    expect(battleOverlay(s.state)?.text).toBe(attack === 'basic' ? 'SQUAT!' : attack === 'fast' ? 'JUMPING JACKS!' : 'PUSH-UPS!');
+    s.hold(neutral, C.exerciseAnnouncementMs - 50);
+    expect(s.state.phase).toBe('exercise_announcement'); expect(s.state.reps).toBe(0); expect(s.commands).toEqual([]);
+    s.frame(neutral); expect(s.state.phase).toBe('performing_attack'); expect(battleOverlay(s.state)).toBeNull();
+    if (attack === 'basic') s.squat(); else if (attack === 'fast') s.jack(); else s.pushup();
+    expect(s.state.reps).toBe(1);
+  });
+
+  it('keeps an early movement during the title from leaking into the attack', () => {
+    const s = new BattleSequence(); s.start(); s.jack();
+    for (let n = 0; n < 150 && s.state.phase !== 'exercise_announcement'; n++) s.frame(closedFrame);
+    s.hold(openFrame, 350); expect(s.state.phase).toBe('waiting_for_neutral');
+    expect(s.state.reps).toBe(0); expect(s.commands).toEqual([]);
+    s.prepare(closedFrame); s.hold(closedFrame, 500); expect(s.state.reps).toBe(0);
+  });
+
+  it('exposes correct plank form and local arm/torso errors in battle', () => {
+    const s = new BattleSequence(); s.start(); s.hold(pushUpFrame(0), 500);
+    expect(s.state.formFeedback.status).toBe('correct');
+    s.hold(pushUpFrame(0), 300); s.prepare(pushUpFrame(0));
+    s.hold(pushUpFrame(0), 200); expect(s.state.formFeedback.status).toBe('correct');
+    s.hold(pushUpFrame(0, { hipOffset: -.35 }), 500);
+    expect(s.state.formFeedback).toMatchObject({ status: 'error', regions: ['torso', 'hips'] });
+    s.frame({ landmarks: null, worldLandmarks: null }); expect(s.state.formFeedback.status).toBe('neutral');
+  });
   it('accepts the squat detector calibration stance instead of getting stuck below 165 degrees', () => {
     const s = new BattleSequence(); s.start(squatFrame(0)); s.hold(squatFrame(0), 1600); s.squat();
     s.prepare(squatFrame(0, { knee: 155 }));
@@ -73,7 +115,8 @@ describe('hands-free orchestration using the real exercise detectors', () => {
     expect(s.state.phase).toBe('exercise_prepare'); expect(s.commands).toEqual([]);
     s.now += 50; s.controller.advance(s.now, s.health);
     expect(s.state.phase).toBe('exercise_prepare');
-    s.frame(closedFrame); expect(s.state.phase).toBe('performing_attack'); expect(s.state.reps).toBe(0);
+    s.frame(closedFrame); expect(s.state.phase).toBe('exercise_announcement'); expect(s.state.reps).toBe(0);
+    s.hold(closedFrame, C.exerciseAnnouncementMs); expect(s.state.phase).toBe('performing_attack');
   });
 
   it('cannot accumulate readiness from isolated valid frames separated by sustained bad poses', () => {
@@ -98,6 +141,7 @@ describe('hands-free orchestration using the real exercise detectors', () => {
   it('requires closed → open → closed for selection and five NEW jacks for a single hit', () => {
     const s = new BattleSequence(); s.start(); s.hold(closedFrame, 300); s.hold(openFrame, 600);
     expect(s.state.candidate).toBe('fast'); expect(s.state.selectedAttack).toBeNull();
+    expect(s.state.formFeedback.status).toBe('correct');
     s.hold(closedFrame, 400); expect(s.state.selectedAttack).toBe('fast');
     s.prepare(closedFrame);
     for (let rep = 1; rep <= 5; rep++) { s.jack(); expect(s.state.reps).toBe(rep); expect(s.attacks).toHaveLength(rep === 5 ? 1 : 0); }

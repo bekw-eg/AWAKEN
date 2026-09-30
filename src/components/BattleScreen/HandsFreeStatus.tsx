@@ -4,14 +4,14 @@ import { HANDS_FREE_ATTACKS, HANDS_FREE_CONFIG, type AttackType } from '../../ga
 export function HandsFreeStatus({ battle, debug = false }: { battle: BattleSnapshot; debug?: boolean }) {
   const attack = battle.selectedAttack ? HANDS_FREE_ATTACKS[battle.selectedAttack] : null;
   const { phase } = battle;
-  const title = phase === 'camera_setup' ? 'WAITING FOR PLAYER' : phase === 'battle_intro' ? 'PLAYER DETECTED' :
+  const title = phase === 'camera_setup' ? 'WAITING FOR PLAYER' : phase === 'battle_intro' ? 'PLAYER DETECTED' : phase === 'battle_fight' ? 'FIGHT!' :
     phase === 'selecting_attack' ? 'SELECT YOUR ATTACK' : phase === 'attack_confirmed' ? `${attack?.name} ATTACK SELECTED` :
-    phase === 'waiting_for_neutral' || phase === 'exercise_prepare' || phase === 'turn_prepare' ? 'GET READY' :
+    phase === 'waiting_for_neutral' || phase === 'exercise_prepare' || phase === 'exercise_announcement' || phase === 'turn_prepare' ? 'GET READY' :
     phase === 'performing_attack' ? battle.go ? 'GO!' : `${attack?.name} ATTACK` :
     phase === 'resolving_attack' ? `${attack?.name} ATTACK · HIT!` : phase === 'enemy_turn' ? 'ENEMY TURN' : phase.toUpperCase();
   const guidance = phase === 'camera_setup' ? 'Allow your camera and show your full body.' : phase === 'battle_intro' ? 'BATTLE START' :
     phase === 'selecting_attack' ? 'MOVE YOUR BODY TO SELECT' : phase === 'attack_confirmed' ? 'Selection complete. The next reps power your attack.' :
-    phase === 'waiting_for_neutral' || phase === 'exercise_prepare' ? attack?.neutral :
+    phase === 'waiting_for_neutral' || phase === 'exercise_prepare' || phase === 'exercise_announcement' ? attack?.neutral :
     phase === 'performing_attack' ? attack?.movement : phase === 'turn_prepare' ? 'Your next move is coming.' :
     phase === 'enemy_turn' ? 'Enemy attacks automatically.' : null;
   return <section className="hands-free-status" aria-label="Hands-free battle" data-phase={phase}>
@@ -31,7 +31,7 @@ export function HandsFreeStatus({ battle, debug = false }: { battle: BattleSnaps
         {key === 'strong' && <progress aria-label="Strong stance hold" value={battle.pushupHoldMs} max={HANDS_FREE_CONFIG.pushupPoseHoldMs} />}
       </div>)}
     </div>}
-    {['selecting_attack', 'waiting_for_neutral', 'exercise_prepare', 'performing_attack'].includes(phase) &&
+    {['selecting_attack', 'waiting_for_neutral', 'exercise_prepare', 'exercise_announcement', 'performing_attack'].includes(phase) &&
       <p className={`hands-free-hint${battle.formError ? ' form-error' : ''}`} role="status">
         {!battle.tracking ? 'TRACKING LOST · Show your full body in the camera' : battle.formError ? `FORM ERROR · ${battle.feedback}` : battle.feedback}
       </p>}

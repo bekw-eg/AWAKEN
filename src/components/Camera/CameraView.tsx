@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ExerciseEvent, ExerciseType } from '../../game/types';
 import type { PushUpFrame } from '../../exercise-engine/pushUpTypes';
+import { toFormFeedback, type FormFeedback } from '../../exercise-engine/formFeedback';
+import { useStableFormFeedback } from '../../hooks/useStableFormFeedback';
 import { useSquatGameEvents } from '../../hooks/useSquatGameEvents';
 import { usePoseDetection } from '../../hooks/usePoseDetection';
 import { useSquatExercise } from '../../hooks/useSquatExercise';
@@ -34,9 +36,11 @@ type Props = {
   suspended?: boolean;
   onPoseFrame?: (frame: PushUpFrame) => void;
   trackingPanel?: ReactNode;
+  formFeedback?: FormFeedback;
+  formFeedbackSource?: string;
 };
 
-export function CameraView({ onExerciseEvent, children, forcedExerciseType, onExerciseChange, hideSelector, autoStart = true, mirrored = true, suspended = false, onPoseFrame, trackingPanel }: Props) {
+export function CameraView({ onExerciseEvent, children, forcedExerciseType, onExerciseChange, hideSelector, autoStart = true, mirrored = true, suspended = false, onPoseFrame, trackingPanel, formFeedback, formFeedbackSource }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [enabled, setEnabled] = useState(autoStart);
   const [restartKey, setRestartKey] = useState(0);
@@ -70,6 +74,8 @@ export function CameraView({ onExerciseEvent, children, forcedExerciseType, onEx
   useSquatGameEvents(jumpingJack.repCount, jumpingJack.repJustCounted, confirmRep, 'jumping-jack');
   useSquatGameEvents(pushUp.repCount, pushUp.repJustCounted, confirmRep, 'push-up');
   const result = exerciseType === 'squat' ? squat : exerciseType === 'jumping-jack' ? jumpingJack : pushUp;
+  const displayedForm = useStableFormFeedback(formFeedback ?? toFormFeedback(exerciseType, result),
+    active && isPersonDetected && !suspended, formFeedbackSource ?? exerciseType);
   const stopped = cameraStatus === 'idle' && engineStatus === 'idle' && !error;
   const heading = error ? (error.startsWith('CAMERA ACCESS REQUIRED') ? 'CAMERA ACCESS REQUIRED' : 'CAMERA INTERRUPTED')
     : engineStatus === 'loading' ? 'LOADING POSE MODEL'
@@ -103,8 +109,13 @@ export function CameraView({ onExerciseEvent, children, forcedExerciseType, onEx
           <div className="camera-stage" style={{ aspectRatio: `${videoSize.width} / ${videoSize.height}` }}>
             <div className={`camera-feed${mirrored ? ' mirrored-feed' : ''}`}>
               <video ref={videoRef} autoPlay playsInline muted aria-label="Live webcam" />
-              <PoseOverlay landmarks={landmarks} width={videoSize.width} height={videoSize.height} />
+              <PoseOverlay landmarks={landmarks} width={videoSize.width} height={videoSize.height} feedback={displayedForm} />
             </div>
+            {/* Outside the mirrored feed: stable placement keeps the hint readable and still. */}
+            {(displayedForm.status === 'error' || displayedForm.status === 'warning') && displayedForm.message &&
+              <div className={`pose-form-hint ${displayedForm.status}`} role="status">
+                <span>{displayedForm.status === 'error' ? 'FORM ERROR' : 'CHECK FORM'}</span>{displayedForm.message}
+              </div>}
             <div className="frame-corners" aria-hidden="true" />
             {showLoading && <div className={`camera-loading${active ? ' camera-ready' : ''}`}><LoadingScreen compact ready={active} progress={initializationProgress} status={active ? 'READY' : heading} /></div>}
             {(error || stopped) && <div className="stage-message">

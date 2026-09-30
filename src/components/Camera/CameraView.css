@@ -13,6 +13,10 @@
 .camera-feed video, .pose-overlay { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
 .camera-feed video, .pose-overlay { object-fit: contain; }
 .pose-overlay { pointer-events: none; }
+.pose-form-hint { position: absolute; z-index: 2; bottom: 16px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 32px); width: max-content; padding: 10px 16px; border: 1px solid var(--pose-error); border-radius: var(--radius-md); background: rgb(8 9 11 / .9); color: var(--text-primary); font-size: clamp(12px, 1.2vw, 18px); text-align: center; pointer-events: none; }
+.pose-form-hint span { display: block; font-size: 9px; letter-spacing: .14em; color: var(--pose-error); margin-bottom: 4px; }
+.pose-form-hint.warning { border-color: var(--pose-warning); }
+.pose-form-hint.warning span { color: var(--pose-warning); }
 .frame-corners { pointer-events: none; position: absolute; inset: 16px; border: 1px solid var(--text-muted); opacity: .45; clip-path: polygon(0 0, 20px 0, 20px 1px, calc(100% - 20px) 1px, calc(100% - 20px) 0, 100% 0, 100% 20px, calc(100% - 1px) 20px, calc(100% - 1px) calc(100% - 20px), 100% calc(100% - 20px), 100% 100%, calc(100% - 20px) 100%, calc(100% - 20px) calc(100% - 1px), 20px calc(100% - 1px), 20px 100%, 0 100%, 0 calc(100% - 20px), 1px calc(100% - 20px), 1px 20px, 0 20px); }
 .stage-message { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; }
 .stage-message > .icon { width: 32px; height: 32px; color: var(--text-muted); margin-bottom: 20px; stroke-width: 1; }

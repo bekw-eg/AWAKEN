@@ -5,6 +5,8 @@ import { FighterStatus } from './FighterStatus';
 import { HandsFreeStatus } from './HandsFreeStatus';
 import { HANDS_FREE_ATTACKS } from '../../game/handsFreeConfig';
 import { useHandsFreeBattle } from '../../hooks/useHandsFreeBattle';
+import { BattleOverlay } from './BattleOverlay';
+import { battleOverlay } from '../../game/battleOverlay';
 import './BattleScreen.css';
 
 type Props = {
@@ -20,6 +22,7 @@ export function BattleScreen({ state, onExerciseEvent, onEnemyAttack, onFlee, au
   const debug = import.meta.env.DEV && new URLSearchParams(window.location.search).has('battleDebug');
   if (!currentEnemy) return null;
   return <div className={'battle-screen' + (terminal ? ' terminal-battle' : '')}>
+    <BattleOverlay announcement={battleOverlay(snapshot)} />
     <header className="battle-header"><button className="text-button" onClick={onFlee}><Icon name="ArrowLeft" />Journey</button><div><p className="eyebrow">HANDS-FREE COMBAT</p><h1>{currentEnemy.isBoss ? 'Boss fight' : 'Battle arena'}</h1></div><span className="badge"><Icon name="Flag" />ENCOUNTER {String(state.currentEnemyIndex).padStart(2, '0')}</span></header>
     <div className="combatants">
       <FighterStatus name="Player" level={player.level} hp={player.hp} maxHp={player.maxHp} />
@@ -28,6 +31,7 @@ export function BattleScreen({ state, onExerciseEvent, onEnemyAttack, onFlee, au
     </div>
     <CameraView onExerciseEvent={onExerciseEvent} onPoseFrame={onPoseFrame} forcedExerciseType={selectedExercise}
       hideSelector autoStart={autoStart} mirrored={mirrored} suspended={terminal}
+      formFeedback={snapshot.formFeedback} formFeedbackSource={snapshot.selectedAttack ?? snapshot.candidate ?? 'selection'}
       trackingPanel={<HandsFreeStatus battle={snapshot} debug={debug} />} />
   </div>;
 }

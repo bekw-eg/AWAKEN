@@ -15,6 +15,10 @@
   --warning: #e6b96f;
   --danger: #f4867f;
   --danger-soft: #251818;
+  --pose-neutral: #58a6ff;
+  --pose-correct: #22c55e;
+  --pose-warning: #f59e0b;
+  --pose-error: #ef4444;
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;

@@ -6,11 +6,43 @@ import type { UsePoseDetectionResult } from '../types/pose';
 import { PushUpSequence } from './fixtures/pushUpFrames';
 import { SquatSequence } from './fixtures/squatFrames';
 import { closedFrame, openFrame } from './fixtures/jumpingJackFrames';
+import { BattleOverlay } from '../components/BattleScreen/BattleOverlay';
+import type { BattleOverlayState } from '../game/battleOverlay';
 
 vi.mock('../hooks/usePoseDetection');
 vi.mock('../components/PoseOverlay/PoseOverlay', () => ({ PoseOverlay: () => null }));
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => { cleanup(); vi.useRealTimers(); });
+it('keeps the video and pose feed mounted across announcements and renders unmirrored form hints', () => {
+  const pose: UsePoseDetectionResult = {
+    landmarks: closedFrame.landmarks as UsePoseDetectionResult['landmarks'],
+    worldLandmarks: closedFrame.worldLandmarks as UsePoseDetectionResult['worldLandmarks'],
+    poseTimestampMs: 10, cameraStatus: 'active', engineStatus: 'active', videoSize: { width: 1280, height: 720 },
+    error: null, isLoading: false, isPersonDetected: true,
+  };
+  vi.mocked(usePoseDetection).mockReturnValue(pose);
+  const onPoseFrame = vi.fn(), onExerciseEvent = vi.fn();
+  const element = (announcement: BattleOverlayState | null) => <CameraView onExerciseEvent={onExerciseEvent}
+    onPoseFrame={onPoseFrame} mirrored formFeedback={{ status: 'error', regions: ['arms'], message: 'Выпрями руки' }}>
+    <BattleOverlay announcement={announcement} />
+  </CameraView>;
+  const view = render(element({ type: 'countdown', text: '3' }));
+  const video = screen.getByLabelText('Live webcam');
+  const cameraRef = vi.mocked(usePoseDetection).mock.lastCall![0];
+  for (const text of ['2', '1', 'PUSH-UPS!']) {
+    view.rerender(element({ type: text === 'PUSH-UPS!' ? 'exercise' : 'countdown', text }));
+    expect(screen.getByLabelText('Live webcam')).toBe(video);
+    expect(vi.mocked(usePoseDetection).mock.lastCall).toEqual([cameraRef, true, 0]);
+  }
+  expect(onPoseFrame).toHaveBeenCalledTimes(1);
+  act(() => vi.advanceTimersByTime(250));
+  const hint = screen.getByText('Выпрями руки');
+  expect(hint.closest('.mirrored-feed')).toBeNull();
+  view.rerender(element(null));
+  expect(screen.queryByTestId('battle-overlay')).toBeNull();
+  expect(screen.getByLabelText('Live webcam')).toBe(video);
+  expect(onExerciseEvent).not.toHaveBeenCalled();
+});
 it('emits one push-up game event on real frames and preserves count across modes without replay', () => {
   const pose: UsePoseDetectionResult = {
     landmarks: null, worldLandmarks: null, poseTimestampMs: null, cameraStatus: 'active', engineStatus: 'active',

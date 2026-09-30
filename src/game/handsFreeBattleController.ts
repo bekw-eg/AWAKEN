@@ -5,9 +5,10 @@ import type { PushUpFrame } from '../exercise-engine/pushUpTypes';
 import type { ExerciseEvent } from './types';
 import { HANDS_FREE_ATTACKS, HANDS_FREE_CONFIG as C, type AttackType } from './handsFreeConfig';
 import { isClosedPose, isPushupReadyPose, isStandingPose, standingPoseFeedback } from './handsFreePoses';
+import { CORRECT_FORM, NEUTRAL_FORM, toFormFeedback, type FormFeedback } from '../exercise-engine/formFeedback';
 
-export type BattlePhase = 'camera_setup' | 'battle_intro' | 'selecting_attack' | 'attack_confirmed' |
-  'waiting_for_neutral' | 'exercise_prepare' | 'performing_attack' | 'resolving_attack' |
+export type BattlePhase = 'camera_setup' | 'battle_intro' | 'battle_fight' | 'selecting_attack' | 'attack_confirmed' |
+  'waiting_for_neutral' | 'exercise_prepare' | 'exercise_announcement' | 'performing_attack' | 'resolving_attack' |
   'enemy_turn' | 'turn_prepare' | 'victory' | 'defeat';
 export type BattleCommand = { type: 'attack'; event: ExerciseEvent } | { type: 'enemy_attack' };
 export type BattleSnapshot = {
@@ -15,6 +16,7 @@ export type BattleSnapshot = {
   selectionLocked: boolean; reps: number; countdown: number; pushupHoldMs: number;
   squatPhase: string; jumpingJackPhase: string; feedback: string | null; formError: boolean;
   tracking: boolean; go: boolean; neutralProgress: number;
+  formFeedback: FormFeedback;
 };
 
 /** Owns the meaning of movement; detectors and the game reducer retain their existing jobs.
@@ -43,16 +45,17 @@ export class HandsFreeBattleController {
   private neutralReady = false;
   private neutralObservedMs = 0;
   private neutralLastAt: number | null = null;
+  private formFeedback: FormFeedback = NEUTRAL_FORM;
 
   snapshot(now: number): BattleSnapshot {
     const duration = this.phase === 'battle_intro' ? C.introCountdownMs : this.phase === 'exercise_prepare' ? C.prepareCountdownMs : 0;
     return { phase: this.phase, selectedAttack: this.selected, candidate: this.candidate,
       selectionLocked: this.phase !== 'selecting_attack', reps: this.reps,
-      countdown: duration ? Math.max(0, Math.ceil((duration - (now - this.enteredAt)) / 1000)) : 0,
+      countdown: duration ? Math.max(0, Math.ceil((duration - (now - this.enteredAt)) / C.countdownStepMs)) : 0,
       pushupHoldMs: this.pushupHoldMs, squatPhase: this.squat.getResult().phase,
       jumpingJackPhase: this.jack.getResult().phase, feedback: this.feedback, formError: this.formError,
       tracking: this.tracking, go: this.phase === 'performing_attack' && now - this.enteredAt < C.goLabelMs,
-      neutralProgress: Math.min(1, this.neutralObservedMs / C.neutralHoldMs) };
+      neutralProgress: Math.min(1, this.neutralObservedMs / C.neutralHoldMs), formFeedback: this.formFeedback };
   }
 
   advance(now: number, health: { playerHp: number; enemyHp: number }, frame?: PushUpFrame): BattleCommand[] {
@@ -76,7 +79,11 @@ export class HandsFreeBattleController {
         break;
       case 'battle_intro':
         if (!this.tracking) this.enter('camera_setup', now);
-        else if (elapsed >= C.introCountdownMs) this.enter('selecting_attack', now);
+        else if (elapsed >= C.introCountdownMs) this.enter('battle_fight', now);
+        break;
+      case 'battle_fight':
+        if (!this.tracking) this.enter('camera_setup', now);
+        else if (elapsed >= C.fightAnnouncementMs) this.enter('selecting_attack', now);
         break;
       case 'selecting_attack':
         if (fresh && this.tracking) this.selectFromFrame(frame, now);
@@ -91,13 +98,16 @@ export class HandsFreeBattleController {
         }
         break;
       case 'exercise_prepare':
+      case 'exercise_announcement':
         if (fresh && this.tracking) this.observeNeutral(frame, now);
         // Brief landmark jitter pauses readiness without restarting three seconds.
         // Sustained movement resets preparation; GO always needs a fresh neutral frame.
         if (!this.tracking || this.neutralInvalidAt !== null && now - this.neutralInvalidAt >= C.neutralJitterMs) this.enter('waiting_for_neutral', now);
         else {
           if (fresh && this.neutralReady) this.preparationFrames.push(frame);
-          if (elapsed >= C.prepareCountdownMs && fresh && this.neutralReady) {
+          if (this.phase === 'exercise_prepare' && elapsed >= C.prepareCountdownMs && fresh && this.neutralReady) {
+            this.enter('exercise_announcement', now);
+          } else if (this.phase === 'exercise_announcement' && elapsed >= C.exerciseAnnouncementMs && fresh && this.neutralReady) {
             this.resetDetectors();
             // Detectors stay disabled throughout the countdown. At GO, use only
             // the observed neutral frames to calibrate/arm the fresh detector.
@@ -118,6 +128,7 @@ export class HandsFreeBattleController {
           const result = this.selected === 'basic' ? this.squat.update(frame) : this.selected === 'fast' ? this.jack.update(frame) : this.pushup.update(frame);
           this.feedback = result.feedback;
           this.formError = result.formStatus === 'error';
+          this.formFeedback = toFormFeedback(attack.exercise, result);
           if (result.repJustCounted && !this.formError) {
             this.reps++;
             if (this.reps >= attack.reps) {
@@ -157,6 +168,7 @@ export class HandsFreeBattleController {
         this.selected === 'fast' ? 'Bring feet together and lower both hands' : 'Hold a straight top plank with wrists and ankles visible';
     }
     this.neutralReady = ready;
+    this.formFeedback = ready ? CORRECT_FORM : NEUTRAL_FORM;
     this.neutralLastAt = now;
   }
   private selectFromFrame(frame: PushUpFrame, now: number) {
@@ -164,6 +176,8 @@ export class HandsFreeBattleController {
     if (squat.repJustCounted && squat.formStatus !== 'error' && now - this.lastSelected.basic >= C.squatSelectionCooldownMs) { this.select('basic', now); return; }
     const jack = this.jack.update(frame);
     if (jack.repJustCounted && jack.formStatus !== 'error' && now - this.lastSelected.fast >= C.jumpingJackSelectionCooldownMs) { this.select('fast', now); return; }
+    // Selection can show existing push-up form errors without treating reps as attacks.
+    const pushup = this.pushup.update(frame);
     if (isPushupReadyPose(frame)) {
       const moved = this.pushupAnchor && [11, 12, 23, 24, 27, 28].some(id =>
         (frame.landmarks![id].visibility ?? 0) >= C.minVisibility &&
@@ -173,16 +187,24 @@ export class HandsFreeBattleController {
       this.candidate = 'strong';
       this.feedback = null;
       this.formError = false;
+      this.formFeedback = CORRECT_FORM;
       if (this.pushupHoldMs >= C.pushupPoseHoldMs) this.select('strong', now);
       return;
     }
     this.clearPushupHold();
+    if (pushup.metrics.bodyAngle !== null && pushup.formStatus === 'error') {
+      this.candidate = 'strong'; this.feedback = pushup.feedback; this.formError = true;
+      this.formFeedback = toFormFeedback('push-up', pushup);
+      return;
+    }
     this.candidate = squat.trackingStatus === 'ready' && squat.phase !== 'standing' ? 'basic' :
       jack.trackingStatus === 'ready' && jack.phase !== 'closed' ? 'fast' : null;
     const result = this.candidate === 'basic' ? squat : this.candidate === 'fast' ? jack :
       squat.formStatus === 'error' ? squat : jack.formStatus === 'error' ? jack : null;
     this.feedback = result?.feedback ?? (squat.trackingStatus === 'calibrating' ? 'Stand upright for squat calibration' : null);
     this.formError = result?.formStatus === 'error';
+    this.formFeedback = result ? toFormFeedback(result === squat ? 'squat' : 'jumping-jack', result) :
+      squat.formStatus === 'good' || jack.formStatus === 'good' ? CORRECT_FORM : NEUTRAL_FORM;
   }
   private select(attack: AttackType, now: number) {
     this.selected = attack;
@@ -194,6 +216,7 @@ export class HandsFreeBattleController {
   private enter(phase: BattlePhase, now: number) {
     this.phase = phase; this.enteredAt = now;
     this.feedback = null; this.formError = false;
+    this.formFeedback = NEUTRAL_FORM;
     if (phase === 'exercise_prepare' || phase === 'waiting_for_neutral') this.preparationFrames = [];
     if (phase === 'waiting_for_neutral') {
       this.neutralObservedMs = 0; this.neutralInvalidAt = null; this.neutralLastAt = null; this.neutralReady = false;
@@ -205,11 +228,12 @@ export class HandsFreeBattleController {
   private clearPushupHold() { this.pushupHoldAt = null; this.pushupAnchor = null; this.pushupHoldMs = 0; }
   private resetDetectors() { this.squat.reset(); this.jack.reset(); this.pushup.reset(); this.clearPushupHold(); }
   private loseTracking(now: number) {
-    if (this.phase === 'exercise_prepare') this.enter('waiting_for_neutral', now);
-    if (this.phase === 'battle_intro') this.enter('camera_setup', now);
+    if (this.phase === 'exercise_prepare' || this.phase === 'exercise_announcement') this.enter('waiting_for_neutral', now);
+    if (this.phase === 'battle_intro' || this.phase === 'battle_fight') this.enter('camera_setup', now);
     this.tracking = false; this.candidate = null; this.clearPushupHold();
     this.neutralObservedMs = 0; this.neutralInvalidAt = null; this.neutralLastAt = null; this.neutralReady = false;
     this.squat.pause(); this.jack.pause(); this.pushup.pause();
     this.feedback = 'Show your full body in the camera'; this.formError = false;
+    this.formFeedback = NEUTRAL_FORM;
   }
 }
