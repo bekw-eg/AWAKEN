@@ -12,6 +12,7 @@ import { ProfileScreen } from './ProfileScreen';
 import { SettingsScreen, DEFAULT_PREFERENCES } from './SettingsScreen';
 import { MotionProvider, MOTION, emitMotionEvent } from '../../motion/Motion';
 import { LevelUpEvent } from '../../components/UI/LevelUpEvent';
+import { BOSS_TIMING } from '../../components/Boss/BossCharacter';
 import '../../styles/tokens.css';
 import './Dashboard.css';
 import '../../styles/motion.css';
@@ -49,7 +50,9 @@ export function Dashboard() {
   useEffect(() => {
     if (!outcome) return;
     const systemReduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const timer = setTimeout(() => setResultReady(true), preferences.reducedMotion || systemReduced ? 0 : MOTION.impact);
+    const bossVictory = outcome.victory && outcome.enemy.isBoss;
+    const duration = preferences.reducedMotion || systemReduced ? (bossVictory ? 200 : 0) : bossVictory ? BOSS_TIMING.death : MOTION.impact;
+    const timer = setTimeout(() => setResultReady(true), duration);
     return () => clearTimeout(timer);
   }, [outcome, preferences.reducedMotion]);
 

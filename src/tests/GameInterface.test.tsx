@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ExerciseEvent, ExerciseType } from '../game/types';
 import type { CameraTelemetry } from '../components/Camera/CameraView';
 import { Dashboard } from '../pages/Dashboard/Dashboard';
+import { BOSS_TIMING } from '../components/Boss/BossCharacter';
 
 // Camera/detector integration is covered with real pose sequences in PushUpMode.test.tsx.
 // This boundary supplies correct reps to the real game reducer, navigation, and battle UI.
@@ -98,7 +99,17 @@ it('completes all nine enemies and the boss, shows rewards, and returns to the e
     for (let count = 0; count < 30 && !document.querySelector('.terminal-battle'); count++) rep();
     expect(hp(encounter === 10 ? 'BOSS 1' : 'Enemy ' + encounter)).toBe(0);
     expect(screen.queryByRole('heading', { name: encounter === 10 ? 'Boss defeated.' : 'Victory.' })).toBeNull();
-    act(() => vi.advanceTimersByTime(760));
+    if (encounter === 10) {
+      expect(document.querySelector('.boss-scene')?.getAttribute('data-state')).toBe('death');
+      const mastery = screen.getByRole('progressbar', { name: 'BOSS 1 HP' }).getAttribute('aria-valuenow');
+      rep(); // The mounted terminal camera must not deliver another attack.
+      expect(screen.getByRole('progressbar', { name: 'BOSS 1 HP' }).getAttribute('aria-valuenow')).toBe(mastery);
+      act(() => vi.advanceTimersByTime(BOSS_TIMING.death - 1));
+      expect(screen.queryByRole('heading', { name: 'Boss defeated.' })).toBeNull();
+      act(() => vi.advanceTimersByTime(1));
+    } else {
+      act(() => vi.advanceTimersByTime(760));
+    }
     expect(screen.getByRole('heading', { name: encounter === 10 ? 'Boss defeated.' : 'Victory.' })).toBeTruthy();
     act(() => vi.advanceTimersByTime(1800));
     expect(document.querySelector('.result-reward strong')?.textContent).toBe(encounter === 10 ? '+200' : '+50');

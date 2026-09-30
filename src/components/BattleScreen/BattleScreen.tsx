@@ -7,6 +7,8 @@ import { FighterStatus } from './FighterStatus';
 import { BattleStatus, type BattleFeedback } from './BattleStatus';
 import { BattleIntro } from './BattleIntro';
 import { emitMotionEvent, useValueChange } from '../../motion/Motion';
+import { BossCharacter } from '../Boss/BossCharacter';
+import { useEnemyAttackAnimation } from '../../hooks/useEnemyAttackAnimation';
 import './BattleScreen.css';
 
 type Props = {
@@ -17,7 +19,7 @@ type Props = {
 export function BattleScreen({ state, onExerciseEvent, onEnemyAttack, onFlee, autoStart, mirrored, terminal = false, repeated = false }: Props) {
   const { player, currentEnemy } = state;
   const [selectedAttack, setSelectedAttack] = useState<ExerciseType>('squat');
-  const [seconds, setSeconds] = useState(5);
+  const { seconds, animation } = useEnemyAttackAnimation(currentEnemy, terminal, onEnemyAttack);
   const [feedback, setFeedback] = useState<BattleFeedback>(null);
   const lastAttack = useRef<ExerciseType>('squat');
   const attackSerial = useRef(0);
@@ -31,20 +33,6 @@ export function BattleScreen({ state, onExerciseEvent, onEnemyAttack, onFlee, au
     }
     onExerciseEvent(event);
   }, [onExerciseEvent, terminal]);
-
-  // Preserve the existing cadence, including its reset on every enemy HP change.
-  useEffect(() => {
-    if (!currentEnemy || terminal) return;
-    let nextStrike = Date.now() + 5000;
-    setSeconds(5);
-    const timer = setInterval(() => {
-      emitMotionEvent({ type: 'boss-attack', target: 'player' });
-      onEnemyAttack();
-      nextStrike = Date.now() + 5000;
-    }, 5000);
-    const countdown = setInterval(() => setSeconds(Math.max(0, (nextStrike - Date.now()) / 1000)), 100);
-    return () => { clearInterval(timer); clearInterval(countdown); };
-  }, [currentEnemy, onEnemyAttack, terminal]);
 
   useValueChange(currentEnemy?.hp ?? 0, (before, after) => {
     if (after < before) setFeedback({ kind: 'player', damage: before - after, id: ++attackSerial.current });
@@ -67,6 +55,8 @@ export function BattleScreen({ state, onExerciseEvent, onEnemyAttack, onFlee, au
       <span className="versus">VS</span>
       <FighterStatus name={currentEnemy.name} hp={currentEnemy.hp} maxHp={currentEnemy.maxHp} enemy boss={currentEnemy.isBoss} attack={lastAttack.current} />
     </div>
+    {currentEnemy.isBoss && <BossCharacter state={terminal ? currentEnemy.hp <= 0 ? 'death' : 'idle' : animation.state}
+      hp={currentEnemy.hp} maxHp={currentEnemy.maxHp} eventId={terminal ? 0 : animation.id} paused={terminal && currentEnemy.hp > 0} />}
     <CameraView onExerciseEvent={confirmExercise} forcedExerciseType={selectedAttack} onExerciseChange={setSelectedAttack} hideSelector autoStart={autoStart} mirrored={mirrored} suspended={terminal}>
       {(telemetry) => <>
         <BattleStatus telemetry={telemetry} selected={selectedAttack} feedback={feedback} seconds={seconds} terminal={terminal} />
